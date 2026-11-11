@@ -1,239 +1,294 @@
-using UnityEngine;
 using System.Collections.Generic;
+using UnityEngine;
 
 [DefaultExecutionOrder(50)]
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
 public class OracleArmGraphics : MonoBehaviour
 {
-    [Header("物理数据源")]
+    private static readonly float[] SegmentStations = { 0f, 0.08f, 0.2f, 0.5f, 0.8f, 0.92f, 1f };
+    private static readonly float[] SegmentProfile = { 0.42f, 0.88f, 1f, 0.95f, 0.86f, 0.72f, 0.36f };
+    private static readonly float[] SegmentBands = { -1f, -0.72f, -0.24f, 0.4f, 0.78f, 1f };
+
+    [Header("Physics")]
     public OracleArm oracleArm;
 
-    [Header("原版《雨世界》色盘")]
-    public Color shadowColor = new Color(0.08f, 0.09f, 0.12f);
-    public Color baseMetalColor = new Color(0.25f, 0.28f, 0.32f);
-    public Color highlightColor = new Color(0.65f, 0.7f, 0.75f);
-    public Color pipeColor = new Color(0.05f, 0.05f, 0.06f);
+    [Header("Rain World metal palette")]
+    public Color shadowColor = new Color(0.10f, 0.105f, 0.11f);
+    public Color baseMetalColor = new Color(0.43f, 0.405f, 0.36f);
+    public Color highlightColor = new Color(0.68f, 0.65f, 0.58f);
+    public Color pipeColor = new Color(0.22f, 0.22f, 0.21f);
 
-    [Header("尺寸与贴图")]
+    [Header("Proportions")]
     public Sprite circleSprite;
-    public float rootThickness = 0.8f;
-    public float tipThickness = 0.25f;
+    [Tooltip("Outer width of the first arm segment in world units.")]
+    public float rootThickness = 0.32f;
+    [Tooltip("Outer width of the end joint in world units.")]
+    public float tipThickness = 0.12f;
 
     private MeshFilter meshFilter;
     private Mesh armMesh;
-    private List<SpriteRenderer> jointOuter = new List<SpriteRenderer>();
-    private List<SpriteRenderer> jointMid = new List<SpriteRenderer>();
-    private List<SpriteRenderer> jointHole = new List<SpriteRenderer>();
-    private List<LineRenderer> hydraulicPipes = new List<LineRenderer>();
+    private MeshRenderer meshRenderer;
+    private readonly List<Vector3> vertices = new List<Vector3>(1024);
+    private readonly List<Color> colors = new List<Color>(1024);
+    private readonly List<int> triangles = new List<int>(2048);
+    private SpriteRenderer[] jointOutlines;
+    private SpriteRenderer[] jointFaces;
+    private SpriteRenderer[] jointCenters;
+    private Sprite fallbackCircle;
 
-    private Sprite pixelSprite;
-    private SpriteRenderer sledgeShadow, sledgeMain, sledgeGroove, sledgeHighlight;
-
-    // === 新增：手肘处的柔性弧形盖板 ===
-    private SpriteRenderer elbowShroudShadow, elbowShroudMain, elbowShroudHighlight;
-
-    void Start()
+    private void Start()
     {
-        transform.position = Vector3.zero;
-        transform.rotation = Quaternion.identity;
-        transform.localScale = Vector3.one;
-
         meshFilter = GetComponent<MeshFilter>();
-        MeshRenderer mr = GetComponent<MeshRenderer>();
-        mr.material = new Material(Shader.Find("Sprites/Default"));
-        mr.sortingOrder = -10;
+        meshRenderer = GetComponent<MeshRenderer>();
+        meshRenderer.sharedMaterial = new Material(Shader.Find("Sprites/Default"));
+        meshRenderer.sortingOrder = -10;
 
         armMesh = new Mesh();
-        meshFilter.mesh = armMesh;
+        armMesh.name = "SS articulated arm";
+        armMesh.MarkDynamic();
+        meshFilter.sharedMesh = armMesh;
 
-        Texture2D tex = Texture2D.whiteTexture;
-        pixelSprite = Sprite.Create(tex, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f), 1f);
+        if (circleSprite == null)
+            fallbackCircle = Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, 1, 1),
+                new Vector2(0.5f, 0.5f), 1f);
 
-        sledgeShadow = CreateRect("SledgeShadow", shadowColor, -14);
-        sledgeMain = CreateRect("SledgeMain", baseMetalColor, -13);
-        sledgeGroove = CreateRect("SledgeGroove", Color.black, -12);
-        sledgeHighlight = CreateRect("SledgeHighlight", highlightColor, -11);
+        if (oracleArm == null)
+            return;
 
-        // === 初始化手肘弧形盖板 (层级覆盖在手臂网格之上) ===
-        elbowShroudShadow = CreateCircle("ElbowShroudShadow", shadowColor, -9);
-        elbowShroudMain = CreateCircle("ElbowShroudMain", baseMetalColor, -8);
-        elbowShroudHighlight = CreateCircle("ElbowShroudHighlight", highlightColor, -7);
-
-        if (oracleArm == null) return;
-
-        int nodeCount = oracleArm.segmentLengths.Length + 1;
-
-        for (int i = 0; i < nodeCount; i++)
+        int jointCount = oracleArm.segmentLengths == null ? 0 : oracleArm.segmentLengths.Length;
+        jointOutlines = new SpriteRenderer[jointCount];
+        jointFaces = new SpriteRenderer[jointCount];
+        jointCenters = new SpriteRenderer[jointCount];
+        for (int i = 0; i < jointCount; i++)
         {
-            // 刚性齿轮层级降低，以便被手肘的柔性盖板遮挡
-            jointOuter.Add(CreateCircle($"JointOuter_{i}", shadowColor, -11));
-            jointMid.Add(CreateCircle($"JointMid_{i}", baseMetalColor, -10));
-            jointHole.Add(CreateCircle($"JointHole_{i}", Color.black, -5)); // 黑洞永远在最顶层
-        }
-
-        for (int i = 0; i < oracleArm.segmentLengths.Length; i++)
-        {
-            LineRenderer pipeLr = new GameObject($"Pipe_{i}").AddComponent<LineRenderer>();
-            pipeLr.transform.SetParent(this.transform);
-            pipeLr.material = mr.material;
-            pipeLr.startColor = pipeLr.endColor = pipeColor;
-            pipeLr.sortingOrder = -6;
-            pipeLr.positionCount = 2;
-            hydraulicPipes.Add(pipeLr);
+            jointOutlines[i] = CreateJointSprite("JointOutline_" + i, shadowColor, -8);
+            jointFaces[i] = CreateJointSprite("JointMetal_" + i, baseMetalColor, -7);
+            jointCenters[i] = CreateJointSprite("JointCore_" + i, pipeColor, -6);
         }
     }
 
-    SpriteRenderer CreateCircle(string name, Color c, int order)
+    private SpriteRenderer CreateJointSprite(string objectName, Color color, int sortingOrder)
     {
-        SpriteRenderer sr = new GameObject(name).AddComponent<SpriteRenderer>();
-        sr.transform.SetParent(this.transform);
-        sr.sprite = circleSprite;
-        sr.color = c;
-        sr.sortingOrder = order;
-        return sr;
+        GameObject jointObject = new GameObject(objectName);
+        jointObject.transform.SetParent(transform, false);
+        SpriteRenderer spriteRenderer = jointObject.AddComponent<SpriteRenderer>();
+        spriteRenderer.sprite = circleSprite != null ? circleSprite : fallbackCircle;
+        spriteRenderer.color = color;
+        spriteRenderer.sortingOrder = sortingOrder;
+        return spriteRenderer;
     }
 
-    SpriteRenderer CreateRect(string name, Color c, int order)
+    private void LateUpdate()
     {
-        SpriteRenderer sr = new GameObject(name).AddComponent<SpriteRenderer>();
-        sr.transform.SetParent(this.transform);
-        sr.sprite = pixelSprite;
-        sr.color = c;
-        sr.sortingOrder = order;
-        return sr;
-    }
+        if (oracleArm == null || oracleArm.joints == null || oracleArm.segmentLengths == null ||
+            oracleArm.joints.Length < 2 || armMesh == null)
+            return;
 
-    void LateUpdate()
-    {
-        if (oracleArm == null || oracleArm.joints == null || oracleArm.joints.Length < 2) return;
+        vertices.Clear();
+        colors.Clear();
+        triangles.Clear();
 
-        int nodeCount = oracleArm.joints.Length;
-        int boneCount = nodeCount - 1;
+        Vector2 root = oracleArm.joints[0];
+        Vector2 first = oracleArm.joints[1];
+        Vector2 armDirection = (first - root).sqrMagnitude > 0.0001f
+            ? ((Vector2)first - root).normalized
+            : Vector2.up;
+        Vector2 tangent = TrackTangent(oracleArm.currentTrackPos);
+        if (tangent.sqrMagnitude < 0.0001f)
+            tangent = new Vector2(-armDirection.y, armDirection.x);
 
-        // 1. 渲染滑车基座 (保持不变)
-        int wallIndex = Mathf.FloorToInt(oracleArm.currentTrackPos) % 4;
-        float angle = 0f;
-        if (wallIndex == 0) angle = 0f; else if (wallIndex == 1) angle = -90f; else if (wallIndex == 2) angle = 180f; else if (wallIndex == 3) angle = 90f;
-        Quaternion baseRot = Quaternion.Euler(0, 0, angle);
-        Vector3 basePos = oracleArm.joints[0];
-        float bW = rootThickness * 5.5f, bH = rootThickness * 2.8f;
-        sledgeShadow.transform.position = basePos + baseRot * new Vector3(0, -rootThickness * 0.2f, 0); sledgeShadow.transform.rotation = baseRot; sledgeShadow.transform.localScale = new Vector3(bW, bH, 1f);
-        sledgeMain.transform.position = basePos + baseRot * new Vector3(0, -rootThickness * 0.2f, 0); sledgeMain.transform.rotation = baseRot; sledgeMain.transform.localScale = new Vector3(bW * 0.92f, bH * 0.85f, 1f);
-        sledgeGroove.transform.position = basePos; sledgeGroove.transform.rotation = baseRot; sledgeGroove.transform.localScale = new Vector3(bW * 0.92f, bH * 0.15f, 1f);
-        sledgeHighlight.transform.position = basePos + baseRot * new Vector3(0, -bH * 0.4f, 0); sledgeHighlight.transform.rotation = baseRot; sledgeHighlight.transform.localScale = new Vector3(bW * 0.92f, bH * 0.08f, 1f);
+        // Flat room bracket: a small inset plate, not a rail trolley.
+        Vector2 bracketCenter = root + armDirection * 0.14f;
+        AddOrientedQuad(bracketCenter, tangent, armDirection, 0.78f, 0.46f, shadowColor, -0.03f);
+        AddOrientedQuad(bracketCenter + armDirection * 0.015f, tangent, armDirection,
+            0.63f, 0.31f, baseMetalColor, -0.02f);
+        AddOrientedQuad(bracketCenter + armDirection * 0.025f, tangent, armDirection,
+            0.43f, 0.035f, highlightColor, -0.01f);
 
-        // ==========================================
-        // 2. 差异化装甲网格渲染
-        // ==========================================
-        List<Vector3> vertices = new List<Vector3>();
-        List<Color> colors = new List<Color>();
-        List<int> triangles = new List<int>();
-        int vertIndex = 0;
-
+        int boneCount = Mathf.Min(oracleArm.segmentLengths.Length, oracleArm.joints.Length - 1);
         for (int i = 0; i < boneCount; i++)
         {
-            Vector3 p1 = oracleArm.joints[i];
-            Vector3 p2 = oracleArm.joints[i + 1];
-            Vector3 dir = (p2 - p1).normalized;
-            Vector3 perp = new Vector3(-dir.y, dir.x, 0);
-
-            float t1 = Mathf.Lerp(rootThickness, tipThickness, (float)i / boneCount);
-            float t2 = Mathf.Lerp(rootThickness, tipThickness, (float)(i + 1) / boneCount);
-
-            float dist = Vector3.Distance(p1, p2);
-
-            // 默认的刚性收缩倒角 (暴露出底下的齿轮)
-            float taperStart = Mathf.Min(dist * 0.15f, rootThickness * 0.6f);
-            float taperEnd = taperStart;
-
-            // 【终极细节：区分柔性与刚性】
-            // 第一节和第二节之间的手肘是“连续包裹”的，所以我们在手肘处的网格坚决不收缩！
-            if (i == 0) taperEnd = 0f;   // 第一节靠近手肘的地方不收缩
-            if (i == 1) taperStart = 0f; // 第二节靠近手肘的地方不收缩
-
-            Vector3[] stations = { p1 + dir * taperStart, p1 + dir * taperStart, p2 - dir * taperEnd, p2 - dir * taperEnd };
-            if (i == 0) stations[1] = p1 + dir * Mathf.Min(dist * 0.2f, rootThickness * 0.5f);
-            else if (i == 1) stations[2] = p2 - dir * Mathf.Min(dist * 0.2f, rootThickness * 0.5f);
-            else { stations[1] = p1 + dir * taperStart; stations[2] = p2 - dir * taperEnd; }
-
-            float[] widths = { t1 * 0.35f, t1, t2, t2 * 0.35f };
-
-            for (int s = 0; s < 4; s++)
-            {
-                Vector3 center = stations[s];
-                float w = widths[s];
-                vertices.Add(center + perp * w);
-                vertices.Add(center + perp * (w * 0.5f));
-                vertices.Add(center - perp * (w * 0.2f));
-                vertices.Add(center - perp * w);
-                colors.Add(shadowColor); colors.Add(highlightColor); colors.Add(baseMetalColor); colors.Add(shadowColor);
-            }
-
-            for (int seg = 0; seg < 3; seg++)
-            {
-                int rowStart = vertIndex + seg * 4;
-                for (int col = 0; col < 3; col++)
-                {
-                    int v00 = rowStart + col; int v01 = rowStart + col + 1;
-                    int v10 = rowStart + 4 + col; int v11 = rowStart + 4 + col + 1;
-                    triangles.Add(v00); triangles.Add(v01); triangles.Add(v10);
-                    triangles.Add(v10); triangles.Add(v01); triangles.Add(v11);
-                }
-            }
-            vertIndex += 16;
-
-            hydraulicPipes[i].startWidth = t1 * 0.12f; hydraulicPipes[i].endWidth = t2 * 0.12f;
-            hydraulicPipes[i].SetPosition(0, p1 + dir * (t1 * 0.4f) + perp * (t1 * 0.45f));
-            hydraulicPipes[i].SetPosition(1, p2 - dir * (t2 * 0.4f) + perp * (t2 * 0.45f));
+            Vector2 start = oracleArm.joints[i];
+            Vector2 end = oracleArm.joints[i + 1];
+            DrawArmSegment(start, end, i, boneCount);
         }
 
-        armMesh.Clear(); armMesh.SetVertices(vertices); armMesh.SetColors(colors); armMesh.SetTriangles(triangles, 0);
+        armMesh.Clear();
+        armMesh.SetVertices(vertices);
+        armMesh.SetColors(colors);
+        armMesh.SetTriangles(triangles, 0);
+        armMesh.RecalculateBounds();
 
-        // ==========================================
-        // 3. 差异化齿轮与盖板同步
-        // ==========================================
-        for (int i = 0; i < nodeCount; i++)
+        UpdateJoints(boneCount);
+    }
+
+    private void DrawArmSegment(Vector2 start, Vector2 end, int index, int count)
+    {
+        Vector2 direction = end - start;
+        float length = direction.magnitude;
+        if (length < 0.0001f)
+            return;
+
+        direction /= length;
+        Vector2 side = new Vector2(-direction.y, direction.x);
+        float blend = index / (float)Mathf.Max(1, count - 1);
+        float halfStart = Mathf.Lerp(rootThickness, tipThickness, blend) * 0.5f;
+        float halfEnd = Mathf.Lerp(rootThickness, tipThickness, (index + 1f) / count) * 0.5f;
+
+        int firstVertex = vertices.Count;
+        for (int row = 0; row < SegmentStations.Length; row++)
         {
-            if (i == nodeCount - 1)
+            float t = SegmentStations[row];
+            Vector2 center = Vector2.Lerp(start, end, t);
+            float width = Mathf.Lerp(halfStart, halfEnd, t) * SegmentProfile[row];
+            for (int col = 0; col < SegmentBands.Length; col++)
             {
-                jointOuter[i].enabled = jointMid[i].enabled = jointHole[i].enabled = false;
+                vertices.Add(ToLocal(center + side * width * SegmentBands[col], -0.015f));
+                colors.Add(BandColor(col));
+            }
+        }
+
+        for (int row = 0; row < SegmentStations.Length - 1; row++)
+        {
+            for (int col = 0; col < SegmentBands.Length - 1; col++)
+            {
+                int a = firstVertex + row * SegmentBands.Length + col;
+                int b = a + 1;
+                int c = a + SegmentBands.Length;
+                int d = c + 1;
+                AddTriangle(a, b, c);
+                AddTriangle(c, b, d);
+            }
+        }
+
+        // Narrow internal conduit and a few restrained plate seams match the source's
+        // repeated metal-part sprites without adding oversized gears or bevels.
+        AddRibbon(start + direction * (length * 0.12f) + side * halfStart * 0.1f,
+            end - direction * (length * 0.12f) + side * halfEnd * 0.1f,
+            Mathf.Max(0.012f, halfEnd * 0.1f), pipeColor, -0.005f);
+
+        int seams = Mathf.Clamp(Mathf.RoundToInt(length / 0.42f), 2, 7);
+        for (int seam = 1; seam < seams; seam++)
+        {
+            float t = seam / (float)seams;
+            Vector2 point = Vector2.Lerp(start, end, t);
+            float halfWidth = Mathf.Lerp(halfStart, halfEnd, t) * 0.78f;
+            Vector2 seamStart = point - side * halfWidth;
+            Vector2 seamEnd = point + side * halfWidth;
+            AddRibbon(seamStart, seamEnd, 0.012f, shadowColor * 0.86f, -0.004f);
+        }
+    }
+
+    private Color BandColor(int column)
+    {
+        switch (column)
+        {
+            case 0: return shadowColor;
+            case 1: return baseMetalColor * 0.78f;
+            case 2: return highlightColor * 0.9f;
+            case 3: return baseMetalColor;
+            case 4: return baseMetalColor * 0.72f;
+            default: return shadowColor;
+        }
+    }
+
+    private void AddRibbon(Vector2 start, Vector2 end, float halfWidth, Color color, float depth)
+    {
+        Vector2 direction = end - start;
+        if (direction.sqrMagnitude < 0.000001f)
+            return;
+        direction.Normalize();
+        Vector2 side = new Vector2(-direction.y, direction.x) * halfWidth;
+        AddQuad(start + side, start - side, end + side, end - side, color, depth);
+    }
+
+    private void AddOrientedQuad(Vector2 center, Vector2 axisX, Vector2 axisY,
+        float width, float height, Color color, float depth)
+    {
+        axisX.Normalize();
+        axisY.Normalize();
+        Vector2 x = axisX * width * 0.5f;
+        Vector2 y = axisY * height * 0.5f;
+        AddQuad(center - x - y, center + x - y, center - x + y, center + x + y, color, depth);
+    }
+
+    private void AddQuad(Vector2 bottomLeft, Vector2 bottomRight, Vector2 topLeft, Vector2 topRight,
+        Color color, float depth)
+    {
+        int first = vertices.Count;
+        vertices.Add(ToLocal(bottomLeft, depth));
+        vertices.Add(ToLocal(bottomRight, depth));
+        vertices.Add(ToLocal(topLeft, depth));
+        vertices.Add(ToLocal(topRight, depth));
+        colors.Add(color);
+        colors.Add(color);
+        colors.Add(color);
+        colors.Add(color);
+        AddTriangle(first, first + 1, first + 2);
+        AddTriangle(first + 2, first + 1, first + 3);
+    }
+
+    private void AddTriangle(int a, int b, int c)
+    {
+        triangles.Add(a);
+        triangles.Add(b);
+        triangles.Add(c);
+    }
+
+    private Vector3 ToLocal(Vector2 point, float depth)
+    {
+        return transform.InverseTransformPoint(new Vector3(point.x, point.y, depth));
+    }
+
+    private Vector2 TrackTangent(float trackPosition)
+    {
+        Vector2 before = FramePosition(trackPosition - 0.001f);
+        Vector2 after = FramePosition(trackPosition + 0.001f);
+        return (after - before).normalized;
+    }
+
+    private Vector2 FramePosition(float trackPosition)
+    {
+        // The physics script owns the rounded SS room frame.
+        return oracleArm.GetFramePositionForGraphics(trackPosition);
+    }
+
+    private void UpdateJoints(int boneCount)
+    {
+        if (jointOutlines == null)
+            return;
+        for (int i = 0; i < jointOutlines.Length; i++)
+        {
+            if (i >= oracleArm.joints.Length - 1 || i > boneCount)
+            {
+                jointOutlines[i].enabled = false;
+                jointFaces[i].enabled = false;
+                jointCenters[i].enabled = false;
                 continue;
             }
 
-            Vector3 pos = oracleArm.joints[i];
-            float t = Mathf.Lerp(rootThickness, tipThickness, (float)i / nodeCount);
-
-            if (i == 1) // 【手肘关节：柔性盖板 + 半隐藏齿轮】
-            {
-                jointOuter[i].enabled = false; // 彻底隐藏外围的巨大黑圈
-                jointMid[i].enabled = true;
-                jointHole[i].enabled = true;
-
-                // 内部齿轮保留，被外部装甲缝隙透出来
-                jointMid[i].transform.localScale = Vector3.one * (t * 1.6f);
-                jointHole[i].transform.localScale = Vector3.one * (t * 0.6f);
-
-                // 同步外部弧形盖板，完美补齐两条直臂折叠时的锐角缝隙，形成圆弧！
-                elbowShroudShadow.transform.position = pos;
-                elbowShroudShadow.transform.localScale = Vector3.one * (t * 2.0f);
-                elbowShroudMain.transform.position = pos;
-                elbowShroudMain.transform.localScale = Vector3.one * (t * 1.9f);
-
-                // 提取第一节手臂的方向，让盖板的高光和手臂高光完美对接
-                Vector3 dir0 = (oracleArm.joints[1] - oracleArm.joints[0]).normalized;
-                Vector3 perp0 = new Vector3(-dir0.y, dir0.x, 0);
-                elbowShroudHighlight.transform.position = pos + perp0 * (t * 0.5f);
-                elbowShroudHighlight.transform.localScale = Vector3.one * (t * 0.9f);
-            }
-            else // 【手腕/基座关节：刚性折叠 + 裸露齿轮】
-            {
-                jointOuter[i].enabled = jointMid[i].enabled = jointHole[i].enabled = true;
-                jointOuter[i].transform.localScale = Vector3.one * (t * 2.4f);
-                jointMid[i].transform.localScale = Vector3.one * (t * 1.5f);
-                jointHole[i].transform.localScale = Vector3.one * (t * 0.6f);
-            }
-
-            jointOuter[i].transform.position = jointMid[i].transform.position = jointHole[i].transform.position = pos;
+            Vector3 position = oracleArm.joints[i];
+            float width = Mathf.Lerp(rootThickness, tipThickness, i / (float)Mathf.Max(1, jointOutlines.Length - 1));
+            float outer = width * (i == 0 ? 1.34f : 1.16f);
+            jointOutlines[i].enabled = true;
+            jointFaces[i].enabled = true;
+            jointCenters[i].enabled = true;
+            jointOutlines[i].transform.position = position + Vector3.back * 0.025f;
+            jointFaces[i].transform.position = position + Vector3.back * 0.02f;
+            jointCenters[i].transform.position = position + Vector3.back * 0.015f;
+            jointOutlines[i].transform.localScale = Vector3.one * outer;
+            jointFaces[i].transform.localScale = Vector3.one * outer * 0.7f;
+            jointCenters[i].transform.localScale = Vector3.one * outer * 0.22f;
         }
+    }
+
+    private void OnDestroy()
+    {
+        if (armMesh != null)
+            Destroy(armMesh);
+        if (meshRenderer != null && meshRenderer.sharedMaterial != null)
+            Destroy(meshRenderer.sharedMaterial);
+        if (fallbackCircle != null)
+            Destroy(fallbackCircle);
     }
 }

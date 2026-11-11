@@ -757,15 +757,24 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::OracleArm
   puppetBody: {fileID: 1994669552}
+  connectionOffset: {x: 0, y: -0.25}
+  roomSizeInTiles: {x: 48, y: 35}
+  roomPixelsPerUnit: 100
+  baseSlideSpeed: 0.38
+  currentTrackPos: 2.5
   segmentLengths:
   - 3
   - 1.5
   - 0.9
   - 0.3
-  baseSlideSpeed: 2
-  connectionOffset: {x: 0, y: -0.25}
+  jointGravity: 1.6
+  jointDamping: 2.4
+  inverseKinematicIterations: 18
+  terrainCollisionMask:
+    serializedVersion: 2
+    m_Bits: 0
+  jointCollisionRadius: 0.12
   joints: []
-  currentTrackPos: 0
 --- !u!4 &490677116
 Transform:
   m_ObjectHideFlags: 0
@@ -1025,15 +1034,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::OracleUmbilicalGraphics
   umbilicalPhysics: {fileID: 1020775470}
-  trunkBaseColor: {r: 0.2, g: 0.2, b: 0.22, a: 1}
-  trunkHighlightColor: {r: 0.6, g: 0.65, b: 0.7, a: 1}
-  trunkWidth: 0.18
+  trunkBaseColor: {r: 0.18, g: 0.18, b: 0.18, a: 1}
+  trunkHighlightColor: {r: 0.48, g: 0.46, b: 0.42, a: 1}
+  trunkWidth: 0.2
   trunkHeight: 0.06
   cordColors:
-  - {r: 0.6, g: 0.15, b: 0.15, a: 1}
-  - {r: 0.15, g: 0.25, b: 0.5, a: 1}
-  - {r: 0.3, g: 0.3, b: 0.35, a: 1}
-  cordWidth: 0.04
+  - {r: 0.62, g: 0.55, b: 0.44, a: 1}
+  - {r: 0.34, g: 0.42, b: 0.45, a: 1}
+  - {r: 0.48, g: 0.34, b: 0.32, a: 1}
+  cordWidth: 0.035
 --- !u!4 &719272508
 Transform:
   m_ObjectHideFlags: 0
@@ -1127,13 +1136,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::OracleArmGraphics
   oracleArm: {fileID: 490677115}
-  shadowColor: {r: 0.5568628, g: 0.47058827, b: 0.454902, a: 1}
-  baseMetalColor: {r: 0.5568628, g: 0.47058827, b: 0.454902, a: 1}
-  highlightColor: {r: 0.6392157, g: 0.5686275, b: 0.5568628, a: 1}
-  pipeColor: {r: 0.5058824, g: 0.427451, b: 0.4156863, a: 1}
+  shadowColor: {r: 0.1, g: 0.105, b: 0.11, a: 1}
+  baseMetalColor: {r: 0.43, g: 0.405, b: 0.36, a: 1}
+  highlightColor: {r: 0.68, g: 0.65, b: 0.58, a: 1}
+  pipeColor: {r: 0.22, g: 0.22, b: 0.21, a: 1}
   circleSprite: {fileID: -6514355451370824425, guid: 40889569eafafbd4b8473396b351e800, type: 3}
-  rootThickness: 0.125
-  tipThickness: 0.00125
+  rootThickness: 0.32
+  tipThickness: 0.12
 --- !u!23 &923845878
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -1403,18 +1412,25 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::OracleUmbilical
   floorAnchor: {fileID: 51985232}
+  useCameraAnchor: 1
   oracleArm: {fileID: 490677115}
   puppetBody: {fileID: 1994669552}
-  trunkSegments: 100
+  puppetHead: {fileID: 351896725}
+  trunkSegments: 80
   elbowIndex: 60
-  trunkSegLen: 0.1
-  structuralRigidity: 0.25
-  maxTailDistance: 2.5
-  trunkGravity: -15
-  smallCordCount: 5
-  smallCordSegments: 15
-  smallCordSegLen: 0.15
-  smallCordGravity: -10
+  trunkSegLen: 0.12
+  trunkGravity: -0.65
+  trunkDamping: 0.995
+  solverIterations: 6
+  smallCordCount: 14
+  smallCordSegments: 20
+  smallCordSegLen: 0.1
+  smallCordGravity: -0.45
+  smallCordDamping: 0.994
+  terrainCollisionMask:
+    serializedVersion: 2
+    m_Bits: 0
+  terrainCollisionRadius: 0.045
   puppetConnectionOffset: {x: 0, y: -0.5}
   trunkPos: []
 --- !u!4 &1020775471

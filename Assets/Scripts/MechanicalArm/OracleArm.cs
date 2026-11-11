@@ -1,155 +1,368 @@
 using UnityEngine;
 
-// 保证物理在渲染之前计算
+// The room-frame and the joints move before their graphics and umbilical are updated.
 [DefaultExecutionOrder(-50)]
 public class OracleArm : MonoBehaviour
 {
-    [Header("追踪目标")]
-    public Transform puppetBody; // 人偶身体
+    [Header("Oracle target")]
+    public Transform puppetBody;
+    public Vector2 connectionOffset = new Vector2(0f, -0.25f);
 
-    [Header("原版骨骼参数 (按比例缩小)")]
-    // 对应源码的 300f, 150f, 90f, 30f
-    public float[] segmentLengths = { 3.0f, 1.5f, 0.9f, 0.3f };
-    public float baseSlideSpeed = 2f;
-    public Vector2 connectionOffset = new Vector2(0, 0.8f); // 对准人偶后背
+    [Header("Rain World room frame")]
+    [Tooltip("SSOracleBehavior's standard room frame, expressed in 20 px tiles.")]
+    public Vector2Int roomSizeInTiles = new Vector2Int(48, 35);
+    public float roomPixelsPerUnit = 100f;
+    [Tooltip("Base movement speed in frame-track units per second.")]
+    public float baseSlideSpeed = 0.38f;
+    public float currentTrackPos = 2.5f;
 
-    // 暴露给视觉脚本读取的坐标数组
+    [Header("Four original joint lengths (300, 150, 90, 30 px at 100 px/unit)")]
+    public float[] segmentLengths = { 3f, 1.5f, 0.9f, 0.3f };
+    public float jointGravity = 1.6f;
+    public float jointDamping = 2.4f;
+    public int inverseKinematicIterations = 18;
+    public LayerMask terrainCollisionMask;
+    public float jointCollisionRadius = 0.12f;
+
+    // Includes the target point after the four Rain World joints.
     [HideInInspector] public Vector3[] joints;
 
+    private readonly Vector2[] cornerPositions = new Vector2[4];
+    private Vector2[] solvedPositions;
+    private Vector2[] preSolvePositions;
+    private Vector2[] jointVelocities;
     private Camera mainCam;
-    private Vector2[] corners = new Vector2[4];
-    public float currentTrackPos = 0f;
-    private float totalLength;
     private bool initialized;
+    private readonly Collider2D[] collisionBuffer = new Collider2D[8];
 
-    void Start()
+    private const float CornerTrackRadius = 0.1f;
+    private const float ScreenMargin = 0.08f;
+
+    private void Start()
     {
         mainCam = Camera.main;
-        int nodeCount = segmentLengths.Length + 1;
-        joints = new Vector3[nodeCount];
+        int linkCount = segmentLengths == null ? 0 : segmentLengths.Length;
+        joints = new Vector3[linkCount + 1];
+        solvedPositions = new Vector2[linkCount + 1];
+        preSolvePositions = new Vector2[linkCount + 1];
+        jointVelocities = new Vector2[linkCount + 1];
+        RefreshRoomFrame();
 
-        totalLength = 0f;
-        foreach (float len in segmentLengths) totalLength += len;
-
-        if (mainCam != null && puppetBody != null)
-        {
-            CalculateBounds();
-            Vector3 targetPos = puppetBody.position + (Vector3)connectionOffset;
-            currentTrackPos = GetClosestTrackPos(targetPos);
-            joints[0] = GetPosFromTrack(currentTrackPos);
-            InitializeChain(joints[0], targetPos);
-            initialized = true;
-        }
+        currentTrackPos = Mathf.Repeat(currentTrackPos, 4f);
+        Vector2 root = FramePosition(currentTrackPos);
+        Vector2 target = GetBodyTarget();
+        InitializeChain(root, target);
+        SolveArm(root, target, 0f);
+        initialized = true;
     }
 
-    void Update()
+    private void Update()
     {
-        if (puppetBody == null || mainCam == null || joints == null || joints.Length < 2) return;
+        if (puppetBody == null || segmentLengths == null || segmentLengths.Length == 0)
+            return;
 
-        // 1. 复刻源码：计算房间四角与 0~4 的一维轨道 (FramePos)
-        CalculateBounds();
-        Vector3 targetPos = puppetBody.position + (Vector3)connectionOffset;
-        float targetTrackPos = GetClosestTrackPos(targetPos);
+        if (mainCam == null)
+            mainCam = Camera.main;
 
+        RefreshRoomFrame();
+        if (joints == null || joints.Length != segmentLengths.Length + 1)
+        {
+            joints = new Vector3[segmentLengths.Length + 1];
+            solvedPositions = new Vector2[joints.Length];
+            preSolvePositions = new Vector2[joints.Length];
+            jointVelocities = new Vector2[joints.Length];
+            initialized = false;
+        }
+
+        Vector2 target = GetBodyTarget();
+        float desiredTrack = ClosestTrackPosition(target);
         if (!initialized)
         {
-            currentTrackPos = targetTrackPos;
-            joints[0] = GetPosFromTrack(currentTrackPos);
-            InitializeChain(joints[0], targetPos);
+            currentTrackPos = desiredTrack;
+            InitializeChain(FramePosition(currentTrackPos), target);
             initialized = true;
         }
 
-        // 使用角度插值保证轨道滑行绝对平滑，不穿模
-        float currentAngle = currentTrackPos * 90f;
-        float targetAngle = targetTrackPos * 90f;
-        currentAngle = Mathf.LerpAngle(currentAngle, targetAngle, 1f - Mathf.Exp(-baseSlideSpeed * Time.deltaTime));
-        if (currentAngle < 0f) currentAngle += 360f;
-        currentTrackPos = (currentAngle % 360f) / 90f;
+        currentTrackPos = MoveOnTrack(currentTrackPos, desiredTrack, baseSlideSpeed * Time.deltaTime);
+        Vector2 root = FramePosition(currentTrackPos);
+        SolveArm(root, target, Time.deltaTime);
+    }
 
-        // 基座真实坐标
-        joints[0] = GetPosFromTrack(currentTrackPos);
+    private void RefreshRoomFrame()
+    {
+        float pixelScale = 1f / Mathf.Max(1f, roomPixelsPerUnit);
+        float tileSize = 20f * pixelScale;
 
-        // 2. 复刻源码：刚体逆向运动学 (Inverse Kinematics)
-        int n = joints.Length;
-        // 施加原版的重力下垂倾向
-        for (int i = 1; i < n - 1; i++) joints[i].y -= 4f * Time.deltaTime;
+        Vector2 roomCenter = mainCam != null
+            ? (Vector2)mainCam.transform.position
+            : Vector2.zero;
+        roomCenter.x -= roomSizeInTiles.x * tileSize * 0.5f;
+        roomCenter.y -= roomSizeInTiles.y * tileSize * 0.5f;
 
-        float currentDist = Vector3.Distance(joints[0], targetPos);
+        // These are the room-tile anchors used by OracleArm's standard SS frame.
+        cornerPositions[0] = roomCenter + new Vector2(10.5f, 31.5f) * tileSize;
+        cornerPositions[1] = roomCenter + new Vector2(38.5f, 31.5f) * tileSize;
+        cornerPositions[2] = roomCenter + new Vector2(38.5f, 3.5f) * tileSize;
+        cornerPositions[3] = roomCenter + new Vector2(10.5f, 3.5f) * tileSize;
+    }
 
-        if (currentDist >= totalLength)
+    private Vector2 GetBodyTarget()
+    {
+        return (Vector2)puppetBody.position + connectionOffset;
+    }
+
+    private void InitializeChain(Vector2 root, Vector2 target)
+    {
+        if (solvedPositions == null || solvedPositions.Length != segmentLengths.Length + 1)
         {
-            // 手臂到达伸展极限时拉直；原版不会因此移动 Oracle 本体。
-            Vector3 dir = (targetPos - joints[0]).normalized;
-            targetPos = joints[0] + dir * totalLength;
+            solvedPositions = new Vector2[segmentLengths.Length + 1];
+            preSolvePositions = new Vector2[segmentLengths.Length + 1];
+        }
+        if (preSolvePositions == null || preSolvePositions.Length != solvedPositions.Length)
+            preSolvePositions = new Vector2[solvedPositions.Length];
+        if (jointVelocities == null || jointVelocities.Length != solvedPositions.Length)
+            jointVelocities = new Vector2[solvedPositions.Length];
 
-            for (int i = 1; i < n; i++)
-                joints[i] = joints[i - 1] + dir * segmentLengths[i - 1];
+        Vector2 direction = target - root;
+        if (direction.sqrMagnitude < 0.0001f)
+            direction = Vector2.up;
+        direction.Normalize();
+        Vector2 bend = new Vector2(-direction.y, direction.x);
+        if (Vector2.Dot(bend, Vector2.down) < 0f)
+            bend = -bend;
+
+        float totalLength = TotalLength();
+        for (int i = 0; i < solvedPositions.Length; i++)
+        {
+            float t = i / (float)(solvedPositions.Length - 1);
+            solvedPositions[i] = Vector2.Lerp(root, target, t) +
+                bend * (Mathf.Sin(t * Mathf.PI) * Mathf.Min(0.45f, totalLength * 0.08f));
+            jointVelocities[i] = Vector2.zero;
+        }
+
+        solvedPositions[0] = root;
+        solvedPositions[solvedPositions.Length - 1] = target;
+        for (int i = 0; i < joints.Length; i++)
+            joints[i] = solvedPositions[i];
+    }
+
+    private void SolveArm(Vector2 root, Vector2 target, float dt)
+    {
+        int pointCount = solvedPositions.Length;
+        if (pointCount < 2)
+            return;
+
+        dt = Mathf.Clamp(dt, 0f, 1f / 20f);
+        for (int i = 0; i < pointCount; i++)
+            preSolvePositions[i] = solvedPositions[i];
+
+        for (int i = 1; i < pointCount - 1; i++)
+        {
+            jointVelocities[i] += Vector2.down * jointGravity * dt;
+            jointVelocities[i] *= Mathf.Exp(-jointDamping * dt);
+            solvedPositions[i] += jointVelocities[i] * dt;
+            solvedPositions[i] = ClampToView(solvedPositions[i]);
+        }
+
+        float totalLength = TotalLength();
+        Vector2 rootToTarget = target - root;
+        Vector2 endpoint = target;
+        if (rootToTarget.magnitude >= totalLength)
+        {
+            Vector2 direction = rootToTarget.sqrMagnitude < 0.0001f ? Vector2.down : rootToTarget.normalized;
+            endpoint = root + direction * totalLength;
+            solvedPositions[0] = root;
+            for (int i = 0; i < segmentLengths.Length; i++)
+                solvedPositions[i + 1] = solvedPositions[i] + direction * Mathf.Max(0.01f, segmentLengths[i]);
         }
         else
         {
-            // 刚体 FABRIK 折叠逼近
-            for (int iter = 0; iter < 15; iter++)
+            int iterations = Mathf.Clamp(inverseKinematicIterations, 4, 48);
+            for (int iteration = 0; iteration < iterations; iteration++)
             {
-                joints[n - 1] = targetPos;
-                for (int i = n - 2; i >= 0; i--)
+                solvedPositions[pointCount - 1] = target;
+                for (int i = pointCount - 2; i >= 0; i--)
                 {
-                    Vector3 dir = (joints[i] - joints[i + 1]).normalized;
-                    joints[i] = joints[i + 1] + dir * segmentLengths[i];
+                    Vector2 direction = solvedPositions[i] - solvedPositions[i + 1];
+                    if (direction.sqrMagnitude < 0.0001f)
+                        direction = Vector2.left;
+                    solvedPositions[i] = solvedPositions[i + 1] +
+                        direction.normalized * Mathf.Max(0.01f, segmentLengths[i]);
                 }
 
-                joints[0] = GetPosFromTrack(currentTrackPos);
-                for (int i = 1; i < n; i++)
+                solvedPositions[0] = root;
+                for (int i = 0; i < pointCount - 1; i++)
                 {
-                    Vector3 dir = (joints[i] - joints[i - 1]).normalized;
-                    joints[i] = joints[i - 1] + dir * segmentLengths[i - 1];
+                    Vector2 direction = solvedPositions[i + 1] - solvedPositions[i];
+                    if (direction.sqrMagnitude < 0.0001f)
+                        direction = Vector2.down;
+                    solvedPositions[i + 1] = solvedPositions[i] +
+                        direction.normalized * Mathf.Max(0.01f, segmentLengths[i]);
                 }
+
+                for (int i = 1; i < pointCount - 1; i++)
+                    solvedPositions[i] = ResolveTerrainCollision(ClampToView(solvedPositions[i]));
             }
-            joints[n - 1] = targetPos; // 终极吸附，消灭残影
+        }
+
+        // Keep the body endpoint exact while retaining the original four fixed link lengths.
+        solvedPositions[pointCount - 1] = endpoint;
+        for (int i = 0; i < pointCount; i++)
+        {
+            if (dt > 0f && i > 0 && i < pointCount - 1)
+                jointVelocities[i] = (solvedPositions[i] - preSolvePositions[i]) / dt;
+            joints[i] = new Vector3(solvedPositions[i].x, solvedPositions[i].y, 0f);
         }
     }
 
-    private void InitializeChain(Vector3 basePosition, Vector3 targetPosition)
+    private Vector2 ClampToView(Vector2 point)
     {
-        Vector3 direction = (targetPosition - basePosition).normalized;
-        if (direction.sqrMagnitude < 0.0001f) direction = Vector3.down;
-        for (int i = 1; i < joints.Length; i++)
-            joints[i] = joints[i - 1] + direction * segmentLengths[i - 1];
+        if (mainCam == null || !mainCam.orthographic)
+            return point;
+
+        Vector2 center = mainCam.transform.position;
+        float halfHeight = mainCam.orthographicSize - ScreenMargin;
+        float halfWidth = mainCam.orthographicSize * mainCam.aspect - ScreenMargin;
+        point.x = Mathf.Clamp(point.x, center.x - halfWidth, center.x + halfWidth);
+        point.y = Mathf.Clamp(point.y, center.y - halfHeight, center.y + halfHeight);
+        return point;
     }
 
-    // --- 轨道数学换算 (严谨对齐屏幕边缘) ---
-    // --- 轨道数学换算 (严谨对齐屏幕边缘) ---
-    void CalculateBounds()
+    private Vector2 ResolveTerrainCollision(Vector2 point)
     {
-        // 1. 获取摄像机在世界空间中的真实坐标！
-        Vector2 camPos = mainCam.transform.position;
+        if (terrainCollisionMask.value == 0 || jointCollisionRadius <= 0f)
+            return point;
 
-        float h = mainCam.orthographicSize;
-        float w = h * mainCam.aspect;
+        int hitCount = Physics2D.OverlapCircleNonAlloc(point, jointCollisionRadius,
+            collisionBuffer, terrainCollisionMask);
+        for (int hitIndex = 0; hitIndex < hitCount; hitIndex++)
+        {
+            Collider2D hit = collisionBuffer[hitIndex];
+            if (hit == null || IsPuppetCollider(hit))
+                continue;
 
-        // 2. 将视野长宽叠加到摄像机的坐标上，得出绝对正确的屏幕边缘
-        corners[0] = new Vector2(camPos.x - w, camPos.y + h); // 左上
-        corners[1] = new Vector2(camPos.x + w, camPos.y + h); // 右上
-        corners[2] = new Vector2(camPos.x + w, camPos.y - h); // 右下
-        corners[3] = new Vector2(camPos.x - w, camPos.y - h); // 左下
+            Vector2 closest = hit.ClosestPoint(point);
+            Vector2 outward = point - closest;
+            if (outward.sqrMagnitude < 0.000001f)
+                outward = point - (Vector2)hit.bounds.center;
+            if (outward.sqrMagnitude < 0.000001f)
+                outward = Vector2.up;
+            point = closest + outward.normalized * jointCollisionRadius;
+        }
+        return point;
     }
 
-    float GetClosestTrackPos(Vector2 pos)
+    private bool IsPuppetCollider(Collider2D collider)
     {
-        float dTop = Mathf.Abs(pos.y - corners[0].y), dRight = Mathf.Abs(pos.x - corners[1].x);
-        float dBot = Mathf.Abs(pos.y - corners[2].y), dLeft = Mathf.Abs(pos.x - corners[0].x);
-        float min = Mathf.Min(dTop, dRight, dBot, dLeft);
-
-        if (min == dTop) return 0f + Mathf.InverseLerp(corners[0].x, corners[1].x, pos.x);
-        if (min == dRight) return 1f + Mathf.InverseLerp(corners[1].y, corners[2].y, pos.y);
-        if (min == dBot) return 2f + Mathf.InverseLerp(corners[2].x, corners[3].x, pos.x);
-        return 3f + Mathf.InverseLerp(corners[3].y, corners[0].y, pos.y);
+        if (puppetBody == null)
+            return false;
+        Transform colliderTransform = collider.transform;
+        return colliderTransform == puppetBody || colliderTransform.IsChildOf(puppetBody);
     }
 
-    Vector2 GetPosFromTrack(float t)
+    private float TotalLength()
     {
-        if (t < 1f) return Vector2.Lerp(corners[0], corners[1], t);
-        if (t < 2f) return Vector2.Lerp(corners[1], corners[2], t - 1f);
-        if (t < 3f) return Vector2.Lerp(corners[2], corners[3], t - 2f);
-        return Vector2.Lerp(corners[3], corners[0], t - 3f);
+        float total = 0f;
+        for (int i = 0; i < segmentLengths.Length; i++)
+            total += Mathf.Max(0.01f, segmentLengths[i]);
+        return total;
+    }
+
+    private float ClosestTrackPosition(Vector2 position)
+    {
+        float bestDistance = float.PositiveInfinity;
+        float bestTrack = currentTrackPos;
+        for (int i = 0; i < cornerPositions.Length; i++)
+        {
+            Vector2 start = cornerPositions[i];
+            Vector2 end = cornerPositions[(i + 1) % cornerPositions.Length];
+            Vector2 segment = end - start;
+            float t = segment.sqrMagnitude < 0.0001f
+                ? 0f
+                : Mathf.Clamp01(Vector2.Dot(position - start, segment) / segment.sqrMagnitude);
+            float distance = (position - (start + segment * t)).sqrMagnitude;
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                bestTrack = i + t;
+            }
+        }
+        return Mathf.Repeat(bestTrack, 4f);
+    }
+
+    private float MoveOnTrack(float current, float target, float distance)
+    {
+        float delta = Mathf.DeltaAngle(current * 90f, target * 90f);
+        return Mathf.Repeat(current + Mathf.Sign(delta) * Mathf.Min(Mathf.Abs(delta) / 90f, distance), 4f);
+    }
+
+    private Vector2 FramePosition(float trackPosition)
+    {
+        float track = Mathf.Repeat(trackPosition, 4f);
+        float nearestCorner = Mathf.Round(track);
+        float offsetFromCorner = track - nearestCorner;
+        int cornerIndex = ((int)nearestCorner % 4 + 4) % 4;
+
+        if (Mathf.Abs(offsetFromCorner) <= CornerTrackRadius)
+        {
+            Vector2 corner = cornerPositions[cornerIndex];
+            Vector2 previous = cornerPositions[(cornerIndex + 3) % 4];
+            Vector2 next = cornerPositions[(cornerIndex + 1) % 4];
+            Vector2 incoming = (corner - previous).normalized;
+            Vector2 outgoing = (next - corner).normalized;
+            float incomingRadius = Vector2.Distance(previous, corner) * CornerTrackRadius;
+            float outgoingRadius = Vector2.Distance(corner, next) * CornerTrackRadius;
+            float t = Mathf.InverseLerp(-CornerTrackRadius, CornerTrackRadius, offsetFromCorner);
+            Vector2 a = corner - incoming * incomingRadius;
+            Vector2 b = corner + outgoing * outgoingRadius;
+            float inverse = 1f - t;
+            return inverse * inverse * a + 2f * inverse * t * corner + t * t * b;
+        }
+
+        int edge = Mathf.FloorToInt(track);
+        float edgeT = track - edge;
+        Vector2 edgeStart = cornerPositions[edge];
+        Vector2 edgeEnd = cornerPositions[(edge + 1) % 4];
+        Vector2 edgeDirection = (edgeEnd - edgeStart).normalized;
+        Vector2 previousCorner = cornerPositions[(edge + 3) % 4];
+        Vector2 nextDirection = (cornerPositions[(edge + 2) % 4] - edgeEnd).normalized;
+        float startRadius = Vector2.Distance(previousCorner, edgeStart) * CornerTrackRadius;
+        float endRadius = Vector2.Distance(edgeEnd, cornerPositions[(edge + 2) % 4]) * CornerTrackRadius;
+        Vector2 start = edgeStart + edgeDirection * startRadius;
+        Vector2 end = edgeEnd - edgeDirection * endRadius;
+        float linearT = Mathf.InverseLerp(CornerTrackRadius, 1f - CornerTrackRadius, edgeT);
+        return Vector2.Lerp(start, end, linearT);
+    }
+
+    public Vector2 GetBoundaryAnchor()
+    {
+        if (mainCam == null)
+            mainCam = Camera.main;
+        if (mainCam == null || !mainCam.orthographic)
+            return cornerPositions[1];
+
+        Vector2 center = mainCam.transform.position;
+        float halfWidth = mainCam.orthographicSize * mainCam.aspect;
+        float halfHeight = mainCam.orthographicSize;
+        return center + new Vector2(halfWidth * 0.92f, halfHeight * 0.9f);
+    }
+
+    public Vector2 GetFramePositionForGraphics(float trackPosition)
+    {
+        return FramePosition(trackPosition);
+    }
+
+    public Vector2 GetArmElbowAnchor()
+    {
+        if (joints != null && joints.Length > 1)
+            return joints[1];
+        return transform.position;
+    }
+
+    public Vector2 GetSecondJointAnchor()
+    {
+        if (joints != null && joints.Length > 2)
+            return joints[2];
+        return GetArmElbowAnchor();
     }
 }
