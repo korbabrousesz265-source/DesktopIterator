@@ -16,7 +16,7 @@ public class OracleArm : MonoBehaviour
     [Min(0.1f)] public float carriageSpeed = 9f;
     public float currentTrackPos = 2.5f;
 
-    [Header("Four original joint lengths (300, 150, 90, 30 px at 100 px/unit)")]
+    [Header("Extended span lengths")]
     public float[] segmentLengths = { 3f, 1.5f, 0.9f, 0.3f };
     public float jointGravity = 1.6f;
     public float jointDamping = 5.2f;
@@ -24,18 +24,30 @@ public class OracleArm : MonoBehaviour
     public LayerMask terrainCollisionMask;
     public float jointCollisionRadius = 0.12f;
 
-    // Includes the target point after the four Rain World joints.
+    // The carriage pivot, three animated joints and the puppet socket.
     [HideInInspector] public Vector3[] joints;
+    public Vector2[] Elbows { get; private set; }
 
     private readonly Vector2[] cornerPositions = new Vector2[4];
     private Vector2[] solvedPositions;
     private Vector2[] preSolvePositions;
     private Vector2[] jointVelocities;
+    private float[] spanLengths;
     private Camera mainCam;
     private bool initialized;
     private bool carriageMoving;
+    private float carriageGoal;
+    private float candidateTrack;
+    private float candidateAge;
     private Vector3? dragTarget;
     private readonly Collider2D[] collisionBuffer = new Collider2D[8];
+
+    private const float BaseGoalDwell = 0.18f;
+    private const float BaseGoalTolerance = 0.30f;
+    private const float BaseStartDistance = 1.45f;
+    private const float BaseStopDistance = 0.22f;
+    private const float FoldedSpanRatio = 0.74f;
+    private const float ExtensionSlack = 0.30f;
 
     private void Start()
     {
@@ -43,14 +55,12 @@ public class OracleArm : MonoBehaviour
         if (puppetBody == null || segmentLengths == null || segmentLengths.Length == 0)
             return;
 
-        int linkCount = segmentLengths == null ? 0 : segmentLengths.Length;
-        joints = new Vector3[linkCount + 1];
-        solvedPositions = new Vector2[linkCount + 1];
-        preSolvePositions = new Vector2[linkCount + 1];
-        jointVelocities = new Vector2[linkCount + 1];
+        AllocateChain();
         RefreshRoomFrame();
 
         currentTrackPos = ClosestTrackPosition(GetBodyTarget());
+        candidateTrack = currentTrackPos;
+        carriageGoal = currentTrackPos;
         Vector2 root = FramePosition(currentTrackPos);
         Vector2 target = GetBodyTarget();
         InitializeChain(root, target);
@@ -69,10 +79,7 @@ public class OracleArm : MonoBehaviour
         RefreshRoomFrame();
         if (joints == null || joints.Length != segmentLengths.Length + 1)
         {
-            joints = new Vector3[segmentLengths.Length + 1];
-            solvedPositions = new Vector2[joints.Length];
-            preSolvePositions = new Vector2[joints.Length];
-            jointVelocities = new Vector2[joints.Length];
+            AllocateChain();
             initialized = false;
         }
 
@@ -80,6 +87,10 @@ public class OracleArm : MonoBehaviour
         if (!initialized)
         {
             currentTrackPos = ClosestTrackPosition(target);
+            candidateTrack = currentTrackPos;
+            carriageGoal = currentTrackPos;
+            candidateAge = 0f;
+            carriageMoving = false;
             InitializeChain(FramePosition(currentTrackPos), target);
             initialized = true;
         }
@@ -99,31 +110,64 @@ public class OracleArm : MonoBehaviour
         SolveArm(root, target, Time.deltaTime);
     }
 
+    private void AllocateChain()
+    {
+        int linkCount = segmentLengths.Length;
+        joints = new Vector3[linkCount + 1];
+        solvedPositions = new Vector2[linkCount + 1];
+        preSolvePositions = new Vector2[linkCount + 1];
+        jointVelocities = new Vector2[linkCount + 1];
+        spanLengths = new float[linkCount];
+        Elbows = new Vector2[linkCount];
+    }
+
     private Vector2 MoveCarriage(Vector2 target, float maxReach, float minReach, bool dragging)
     {
         Vector2 root = FramePosition(currentTrackPos);
         float distance = Vector2.Distance(root, target);
         float goal = ClosestTrackPosition(target);
-        float bestDistance = Vector2.Distance(FramePosition(goal), target);
 
-        // Give the chain room to articulate before moving the carriage.
-        // The smaller stop radius keeps it from chattering at the start threshold.
-        float settleDistance = Mathf.Min(maxReach, Mathf.Max(maxReach * 0.85f, bestDistance + 0.08f));
-        float startDistance = Mathf.Min(maxReach - 0.02f, settleDistance + 0.27f);
-        carriageMoving = carriageMoving ? distance > settleDistance : distance > startDistance;
+        if (Mathf.Abs(TrackDelta(candidateTrack, goal)) > BaseGoalTolerance)
+        {
+            candidateTrack = goal;
+            candidateAge = 0f;
+        }
+        else
+        {
+            candidateAge = Mathf.Min(BaseGoalDwell, candidateAge + Time.deltaTime);
+        }
+
+        // Hold the base during small pose changes or a flick across the rail.
+        // At full reach the carriage can start immediately to follow a held drag.
+        bool atReachLimit = dragging && distance > maxReach;
+        bool goalIsStable = candidateAge >= BaseGoalDwell;
+        if (atReachLimit)
+        {
+            carriageGoal = goal;
+            carriageMoving = true;
+        }
+        else if (goalIsStable)
+        {
+            float threshold = carriageMoving ? BaseStopDistance : BaseStartDistance;
+            carriageMoving = Mathf.Abs(TrackDelta(currentTrackPos, goal)) > threshold;
+            if (carriageMoving)
+                carriageGoal = goal;
+        }
 
         if (!dragging && distance > maxReach + 0.03f)
         {
             // The viewport or the puppet may be repositioned from outside the
             // drag loop. Recover the attachment in the new frame.
             currentTrackPos = goal;
+            carriageGoal = goal;
+            carriageMoving = false;
             return FramePosition(goal);
         }
 
         if (!carriageMoving)
             return root;
 
-        float nextTrack = MoveOnTrack(currentTrackPos, goal, carriageSpeed * Time.deltaTime);
+        float nextTrack = MoveOnTrack(currentTrackPos, carriageGoal, carriageSpeed * Time.deltaTime);
         Vector2 nextRoot = FramePosition(nextTrack);
         float nextDistance = Vector2.Distance(nextRoot, target);
         if (!dragging && (nextDistance > maxReach + 0.001f || nextDistance < minReach))
@@ -132,6 +176,8 @@ public class OracleArm : MonoBehaviour
             return root;
         }
         currentTrackPos = nextTrack;
+        if (Mathf.Abs(TrackDelta(currentTrackPos, carriageGoal)) < 0.001f)
+            carriageMoving = false;
         return nextRoot;
     }
 
@@ -170,16 +216,6 @@ public class OracleArm : MonoBehaviour
 
     private void InitializeChain(Vector2 root, Vector2 target)
     {
-        if (solvedPositions == null || solvedPositions.Length != segmentLengths.Length + 1)
-        {
-            solvedPositions = new Vector2[segmentLengths.Length + 1];
-            preSolvePositions = new Vector2[segmentLengths.Length + 1];
-        }
-        if (preSolvePositions == null || preSolvePositions.Length != solvedPositions.Length)
-            preSolvePositions = new Vector2[solvedPositions.Length];
-        if (jointVelocities == null || jointVelocities.Length != solvedPositions.Length)
-            jointVelocities = new Vector2[solvedPositions.Length];
-
         Vector2 direction = target - root;
         if (direction.sqrMagnitude < 0.0001f)
             direction = Vector2.up;
@@ -220,14 +256,14 @@ public class OracleArm : MonoBehaviour
             solvedPositions[i] += jointVelocities[i] * dt;
         }
 
-        float totalLength = TotalLength();
         Vector2 rootToTarget = target - root;
+        float totalLength = PrepareSpanLengths(rootToTarget.magnitude);
         if (rootToTarget.magnitude >= totalLength)
         {
             Vector2 direction = rootToTarget.sqrMagnitude < 0.0001f ? Vector2.down : rootToTarget.normalized;
             solvedPositions[0] = root;
             for (int i = 0; i < segmentLengths.Length; i++)
-                solvedPositions[i + 1] = solvedPositions[i] + direction * Mathf.Max(0.01f, segmentLengths[i]);
+                solvedPositions[i + 1] = solvedPositions[i] + direction * spanLengths[i];
         }
         else
         {
@@ -241,7 +277,7 @@ public class OracleArm : MonoBehaviour
                     if (direction.sqrMagnitude < 0.0001f)
                         direction = Vector2.left;
                     solvedPositions[i] = solvedPositions[i + 1] +
-                        direction.normalized * Mathf.Max(0.01f, segmentLengths[i]);
+                        direction.normalized * spanLengths[i];
                 }
 
                 solvedPositions[0] = root;
@@ -251,7 +287,7 @@ public class OracleArm : MonoBehaviour
                     if (direction.sqrMagnitude < 0.0001f)
                         direction = Vector2.down;
                     solvedPositions[i + 1] = solvedPositions[i] +
-                        direction.normalized * Mathf.Max(0.01f, segmentLengths[i]);
+                        direction.normalized * spanLengths[i];
                 }
 
                 for (int i = 1; i < pointCount - 1; i++)
@@ -265,14 +301,53 @@ public class OracleArm : MonoBehaviour
                 CloseChain(root, target);
         }
 
-        // The forward pass preserves every rigid link. Forcing the final point to
-        // the target here would stretch the last link when the solver has not converged.
         for (int i = 0; i < pointCount; i++)
         {
             if (dt > 0f && i > 0 && i < pointCount - 1)
                 jointVelocities[i] = Vector2.ClampMagnitude((solvedPositions[i] - preSolvePositions[i]) / dt, 8f);
             joints[i] = new Vector3(solvedPositions[i].x, solvedPositions[i].y, 0f);
         }
+        for (int i = 0; i < Elbows.Length; i++)
+            Elbows[i] = SolveElbow(i, solvedPositions[i], solvedPositions[i + 1]);
+    }
+
+    private float PrepareSpanLengths(float distance)
+    {
+        float extended = TotalLength();
+        float travel = Mathf.Clamp(distance + ExtensionSlack, extended * FoldedSpanRatio, extended);
+        if (spanLengths.Length == 1)
+            travel = Mathf.Clamp(distance, 0.001f, extended);
+
+        // The solver joins the main pivots by chords. The two pieces between
+        // each pair of pivots keep their lengths as their shared elbow folds.
+        float ratio = travel / extended;
+        for (int i = 0; i < spanLengths.Length; i++)
+            spanLengths[i] = Mathf.Max(0.01f, segmentLengths[i]) * ratio;
+        return travel;
+    }
+
+    private float GetFirstPieceLength(int span)
+    {
+        float proportion = span == segmentLengths.Length - 1 ? 0.5f : 2f / 3f;
+        return Mathf.Max(0.01f, segmentLengths[span]) * proportion;
+    }
+
+    private Vector2 SolveElbow(int span, Vector2 start, Vector2 end)
+    {
+        float firstLength = GetFirstPieceLength(span);
+        float secondLength = Mathf.Max(0.01f, segmentLengths[span]) - firstLength;
+        Vector2 chord = end - start;
+        float distance = chord.magnitude;
+        if (distance < 0.00001f)
+            return start + Vector2.up * firstLength;
+
+        Vector2 axis = chord / distance;
+        Vector2 normal = new Vector2(-axis.y, axis.x);
+        float along = (firstLength * firstLength - secondLength * secondLength + distance * distance)
+            / (2f * distance);
+        along = Mathf.Clamp(along, -firstLength, firstLength);
+        float rise = Mathf.Sqrt(Mathf.Max(0f, firstLength * firstLength - along * along));
+        return start + axis * along + normal * ((span % 2 == 0 ? 1f : -1f) * rise);
     }
 
     private void CloseChain(Vector2 root, Vector2 target)
@@ -280,12 +355,12 @@ public class OracleArm : MonoBehaviour
         Vector2 current = root;
         for (int i = 0; i < segmentLengths.Length - 1; i++)
         {
-            float length = Mathf.Max(0.01f, segmentLengths[i]);
+            float length = spanLengths[i];
             float remaining = 0f;
             float longest = 0f;
             for (int j = i + 1; j < segmentLengths.Length; j++)
             {
-                float nextLength = Mathf.Max(0.01f, segmentLengths[j]);
+                float nextLength = spanLengths[j];
                 remaining += nextLength;
                 longest = Mathf.Max(longest, nextLength);
             }
@@ -313,7 +388,7 @@ public class OracleArm : MonoBehaviour
             solvedPositions[i + 1] = current;
         }
 
-        float lastLength = Mathf.Max(0.01f, segmentLengths[segmentLengths.Length - 1]);
+        float lastLength = spanLengths[spanLengths.Length - 1];
         solvedPositions[solvedPositions.Length - 1] = Vector2.MoveTowards(current, target, lastLength);
     }
 
@@ -359,10 +434,13 @@ public class OracleArm : MonoBehaviour
 
     private float MinimumLength()
     {
+        if (segmentLengths.Length == 1)
+            return 0f;
+
         float longest = 0f;
         foreach (float length in segmentLengths)
             longest = Mathf.Max(longest, length);
-        return Mathf.Max(0f, 2f * longest - TotalLength());
+        return Mathf.Max(0f, (2f * longest - TotalLength()) * FoldedSpanRatio);
     }
 
     private static Vector2 LimitReach(Vector2 root, Vector2 target, float minimum, float maximum)
@@ -399,11 +477,15 @@ public class OracleArm : MonoBehaviour
 
     private float MoveOnTrack(float current, float target, float distance)
     {
+        float delta = TrackDelta(current, target);
+        return TrackAtDistance(DistanceOnTrack(current) + Mathf.Clamp(delta, -distance, distance));
+    }
+
+    private float TrackDelta(float from, float to)
+    {
         float perimeter = TrackLength();
-        float start = DistanceOnTrack(current);
-        float delta = Mathf.Repeat(DistanceOnTrack(target) - start + perimeter * 0.5f, perimeter)
+        return Mathf.Repeat(DistanceOnTrack(to) - DistanceOnTrack(from) + perimeter * 0.5f, perimeter)
             - perimeter * 0.5f;
-        return TrackAtDistance(start + Mathf.Clamp(delta, -distance, distance));
     }
 
     private float EdgeLength(int edge)
@@ -477,6 +559,7 @@ public class OracleArm : MonoBehaviour
 
     public Vector2 GetArmElbowAnchor()
     {
+        // The existing trunk guide is tied to the first joint after the base.
         if (joints != null && joints.Length > 1)
             return joints[1];
         return transform.position;

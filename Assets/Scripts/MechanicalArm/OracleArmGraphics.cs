@@ -15,9 +15,9 @@ public class OracleArmGraphics : MonoBehaviour
 
     private Mesh armMesh;
     private Material metalMaterial;
-    private readonly List<Vector3> vertices = new List<Vector3>(512);
-    private readonly List<Color> colors = new List<Color>(512);
-    private readonly List<int> triangles = new List<int>(1024);
+    private readonly List<Vector3> vertices = new List<Vector3>(768);
+    private readonly List<Color> colors = new List<Color>(768);
+    private readonly List<int> triangles = new List<int>(1536);
 
     private void Start()
     {
@@ -33,25 +33,30 @@ public class OracleArmGraphics : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (oracleArm == null || oracleArm.joints == null || oracleArm.joints.Length < 2)
+        if (oracleArm == null || oracleArm.joints == null || oracleArm.joints.Length < 2 ||
+            oracleArm.Elbows == null || oracleArm.Elbows.Length + 1 != oracleArm.joints.Length)
             return;
 
         Vector3[] joints = oracleArm.joints;
+        Vector2[] elbows = oracleArm.Elbows;
         vertices.Clear();
         colors.Clear();
         triangles.Clear();
-        DrawMount(joints[0], joints[1]);
+        DrawMount(joints[0], elbows[0]);
 
         int links = joints.Length - 1;
         for (int i = 0; i < links; i++)
         {
             float thickness = Mathf.Lerp(rootThickness, tipThickness, i / (float)Mathf.Max(1, links - 1));
-            DrawLink(joints[i], joints[i + 1], thickness, i < links - 1);
+            bool plated = i < links - 1;
+            DrawLink(joints[i], elbows[i], thickness, plated, true);
+            DrawLink(elbows[i], joints[i + 1], thickness * 0.87f, plated, false);
+            DrawElbowCover(elbows[i], thickness);
         }
         for (int i = 0; i < links; i++)
         {
             float radius = Mathf.Lerp(rootThickness * 0.61f, tipThickness * 0.52f, i / (float)links);
-            Vector2 axis = ((Vector2)(joints[i + 1] - joints[i])).normalized;
+            Vector2 axis = (elbows[i] - (Vector2)joints[i]).normalized;
             DrawBearing(joints[i], radius, axis);
         }
         DrawBodySocket(joints[links]);
@@ -84,7 +89,7 @@ public class OracleArmGraphics : MonoBehaviour
         Quad(yoke + inward * 0.014f, tangent, inward, 0.32f, 0.061f, baseMetalColor);
     }
 
-    private void DrawLink(Vector2 start, Vector2 end, float width, bool hasFaceplate)
+    private void DrawLink(Vector2 start, Vector2 end, float width, bool hasFaceplate, bool longPiece)
     {
         Vector2 displacement = end - start;
         float length = displacement.magnitude;
@@ -93,7 +98,8 @@ public class OracleArmGraphics : MonoBehaviour
 
         Vector2 axis = displacement / length;
         Vector2 side = new Vector2(-axis.y, axis.x);
-        Bar(start, end, width * 0.47f, pinColor);
+        Bar(start, end, width * 0.66f, shadowColor);
+        Bar(start, end, width * 0.39f, baseMetalColor);
         if (!hasFaceplate)
         {
             Bar(Vector2.Lerp(start, end, 0.11f), Vector2.Lerp(start, end, 0.89f),
@@ -104,10 +110,19 @@ public class OracleArmGraphics : MonoBehaviour
         Faceplate(start, end, side, width, shadowColor);
         Faceplate(Vector2.Lerp(start, end, 0.018f), Vector2.Lerp(start, end, 0.982f),
             side, width * 0.74f, baseMetalColor);
-        Quad(Vector2.Lerp(start, end, 0.26f) + side * width * 0.19f,
-            axis, side, length * 0.23f, width * 0.13f, highlightColor);
-        Quad(Vector2.Lerp(start, end, 0.82f), axis, side,
-            Mathf.Min(0.085f, length * 0.11f), width * 0.57f, pinColor);
+        if (longPiece)
+        {
+            Quad(Vector2.Lerp(start, end, 0.26f) + side * width * 0.19f,
+                axis, side, length * 0.23f, width * 0.13f, highlightColor);
+        }
+    }
+
+    private void DrawElbowCover(Vector2 center, float width)
+    {
+        // The two rigid pieces overlap under one elbow cover. The shell has
+        // no exposed pin, so the four main bearings remain easy to read.
+        Disc(center, width * 0.33f, shadowColor, 12);
+        Disc(center, width * 0.195f, baseMetalColor, 12);
     }
 
     private void Faceplate(Vector2 start, Vector2 end, Vector2 side, float width, Color color)
