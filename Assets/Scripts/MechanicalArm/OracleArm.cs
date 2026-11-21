@@ -6,20 +6,20 @@ public class OracleArm : MonoBehaviour
 {
     [Header("Oracle target")]
     public Transform puppetBody;
-    public Vector2 connectionOffset = new Vector2(0f, -0.25f);
+    public Vector2 connectionOffset = new Vector2(0.21f, -0.22f);
 
     [Header("Rain World room frame")]
     [Tooltip("SSOracleBehavior's standard room frame, expressed in 20 px tiles.")]
     public Vector2Int roomSizeInTiles = new Vector2Int(48, 35);
     public float roomPixelsPerUnit = 100f;
-    [Tooltip("Base movement speed in frame-track units per second.")]
-    public float baseSlideSpeed = 0.38f;
+    [Tooltip("Carriage speed along the edge in world units per second.")]
+    [Min(0.1f)] public float carriageSpeed = 9f;
     public float currentTrackPos = 2.5f;
 
     [Header("Four original joint lengths (300, 150, 90, 30 px at 100 px/unit)")]
     public float[] segmentLengths = { 3f, 1.5f, 0.9f, 0.3f };
     public float jointGravity = 1.6f;
-    public float jointDamping = 2.4f;
+    public float jointDamping = 5.2f;
     public int inverseKinematicIterations = 18;
     public LayerMask terrainCollisionMask;
     public float jointCollisionRadius = 0.12f;
@@ -33,12 +33,16 @@ public class OracleArm : MonoBehaviour
     private Vector2[] jointVelocities;
     private Camera mainCam;
     private bool initialized;
+    private bool carriageMoving;
+    private Vector3? dragTarget;
     private readonly Collider2D[] collisionBuffer = new Collider2D[8];
-
 
     private void Start()
     {
         mainCam = Camera.main;
+        if (puppetBody == null || segmentLengths == null || segmentLengths.Length == 0)
+            return;
+
         int linkCount = segmentLengths == null ? 0 : segmentLengths.Length;
         joints = new Vector3[linkCount + 1];
         solvedPositions = new Vector2[linkCount + 1];
@@ -73,24 +77,62 @@ public class OracleArm : MonoBehaviour
         }
 
         Vector2 target = GetBodyTarget();
-        float desiredTrack = ClosestTrackPosition(target);
         if (!initialized)
         {
-            currentTrackPos = desiredTrack;
+            currentTrackPos = ClosestTrackPosition(target);
             InitializeChain(FramePosition(currentTrackPos), target);
             initialized = true;
         }
 
-        currentTrackPos = MoveOnTrack(currentTrackPos, desiredTrack, baseSlideSpeed * Time.deltaTime);
-        Vector2 root = FramePosition(currentTrackPos);
-        // The carriage must catch up when a dragged puppet would otherwise pull the
-        // rigid arm beyond its reach.
-        if (Vector2.Distance(root, target) > TotalLength() - 0.01f)
+        Vector3? drag = dragTarget;
+        dragTarget = null;
+        Vector2 requestedTip = drag.HasValue ? (Vector2)drag.Value + connectionOffset : target;
+        float maxReach = Mathf.Max(0.01f, TotalLength() - 0.018f);
+        float minReach = Mathf.Min(maxReach, MinimumLength() + 0.005f);
+        Vector2 root = MoveCarriage(requestedTip, maxReach, minReach, drag.HasValue);
+        if (drag.HasValue)
         {
-            currentTrackPos = desiredTrack;
-            root = FramePosition(currentTrackPos);
+            target = LimitReach(root, requestedTip, minReach, maxReach);
+            Vector2 bodyPosition = target - connectionOffset;
+            puppetBody.position = new Vector3(bodyPosition.x, bodyPosition.y, drag.Value.z);
         }
         SolveArm(root, target, Time.deltaTime);
+    }
+
+    private Vector2 MoveCarriage(Vector2 target, float maxReach, float minReach, bool dragging)
+    {
+        Vector2 root = FramePosition(currentTrackPos);
+        float distance = Vector2.Distance(root, target);
+        float goal = ClosestTrackPosition(target);
+        float bestDistance = Vector2.Distance(FramePosition(goal), target);
+
+        // Give the chain room to articulate before moving the carriage.
+        // The smaller stop radius keeps it from chattering at the start threshold.
+        float settleDistance = Mathf.Min(maxReach, Mathf.Max(maxReach * 0.85f, bestDistance + 0.08f));
+        float startDistance = Mathf.Min(maxReach - 0.02f, settleDistance + 0.27f);
+        carriageMoving = carriageMoving ? distance > settleDistance : distance > startDistance;
+
+        if (!dragging && distance > maxReach + 0.03f)
+        {
+            // The viewport or the puppet may be repositioned from outside the
+            // drag loop. Recover the attachment in the new frame.
+            currentTrackPos = goal;
+            return FramePosition(goal);
+        }
+
+        if (!carriageMoving)
+            return root;
+
+        float nextTrack = MoveOnTrack(currentTrackPos, goal, carriageSpeed * Time.deltaTime);
+        Vector2 nextRoot = FramePosition(nextTrack);
+        float nextDistance = Vector2.Distance(nextRoot, target);
+        if (!dragging && (nextDistance > maxReach + 0.001f || nextDistance < minReach))
+        {
+            carriageMoving = false;
+            return root;
+        }
+        currentTrackPos = nextTrack;
+        return nextRoot;
     }
 
     private void RefreshRoomFrame()
@@ -228,7 +270,7 @@ public class OracleArm : MonoBehaviour
         for (int i = 0; i < pointCount; i++)
         {
             if (dt > 0f && i > 0 && i < pointCount - 1)
-                jointVelocities[i] = (solvedPositions[i] - preSolvePositions[i]) / dt;
+                jointVelocities[i] = Vector2.ClampMagnitude((solvedPositions[i] - preSolvePositions[i]) / dt, 8f);
             joints[i] = new Vector3(solvedPositions[i].x, solvedPositions[i].y, 0f);
         }
     }
@@ -315,6 +357,24 @@ public class OracleArm : MonoBehaviour
         return total;
     }
 
+    private float MinimumLength()
+    {
+        float longest = 0f;
+        foreach (float length in segmentLengths)
+            longest = Mathf.Max(longest, length);
+        return Mathf.Max(0f, 2f * longest - TotalLength());
+    }
+
+    private static Vector2 LimitReach(Vector2 root, Vector2 target, float minimum, float maximum)
+    {
+        Vector2 delta = target - root;
+        float distance = delta.magnitude;
+        if (distance >= minimum && distance <= maximum)
+            return target;
+        Vector2 direction = distance > 0.00001f ? delta / distance : Vector2.up;
+        return root + direction * Mathf.Clamp(distance, minimum, maximum);
+    }
+
     private float ClosestTrackPosition(Vector2 position)
     {
         float bestDistance = float.PositiveInfinity;
@@ -339,8 +399,44 @@ public class OracleArm : MonoBehaviour
 
     private float MoveOnTrack(float current, float target, float distance)
     {
-        float delta = Mathf.DeltaAngle(current * 90f, target * 90f);
-        return Mathf.Repeat(current + Mathf.Sign(delta) * Mathf.Min(Mathf.Abs(delta) / 90f, distance), 4f);
+        float perimeter = TrackLength();
+        float start = DistanceOnTrack(current);
+        float delta = Mathf.Repeat(DistanceOnTrack(target) - start + perimeter * 0.5f, perimeter)
+            - perimeter * 0.5f;
+        return TrackAtDistance(start + Mathf.Clamp(delta, -distance, distance));
+    }
+
+    private float EdgeLength(int edge)
+    {
+        return Vector2.Distance(cornerPositions[edge], cornerPositions[(edge + 1) % 4]);
+    }
+
+    private float TrackLength()
+    {
+        return Mathf.Max(0.001f, 2f * (EdgeLength(0) + EdgeLength(1)));
+    }
+
+    private float DistanceOnTrack(float track)
+    {
+        track = Mathf.Repeat(track, 4f);
+        int edge = Mathf.FloorToInt(track);
+        float distance = (track - edge) * EdgeLength(edge);
+        for (int i = 0; i < edge; i++)
+            distance += EdgeLength(i);
+        return distance;
+    }
+
+    private float TrackAtDistance(float distance)
+    {
+        distance = Mathf.Repeat(distance, TrackLength());
+        for (int edge = 0; edge < 4; edge++)
+        {
+            float edgeLength = EdgeLength(edge);
+            if (distance < edgeLength)
+                return edge + distance / edgeLength;
+            distance -= edgeLength;
+        }
+        return 0f;
     }
 
     private Vector2 FramePosition(float trackPosition)
@@ -350,20 +446,9 @@ public class OracleArm : MonoBehaviour
         return Vector2.Lerp(cornerPositions[trackEdge], cornerPositions[(trackEdge + 1) % 4], track - trackEdge);
     }
 
-    public Vector3 ConstrainDragPosition(Vector3 position)
+    public void RequestDragPosition(Vector3 position)
     {
-        RefreshRoomFrame();
-        Vector2 target = (Vector2)position + connectionOffset;
-        Vector2 root = FramePosition(ClosestTrackPosition(target));
-        Vector2 delta = target - root;
-        float reach = Mathf.Max(0.01f, TotalLength() - 0.02f);
-        if (delta.magnitude > reach)
-        {
-            Vector2 constrained = root + delta.normalized * reach - connectionOffset;
-            position.x = constrained.x;
-            position.y = constrained.y;
-        }
-        return position;
+        dragTarget = position;
     }
 
     public Vector2 GetBoundaryAnchor()
@@ -379,9 +464,15 @@ public class OracleArm : MonoBehaviour
         return center + new Vector2(halfWidth * 0.94f, halfHeight);
     }
 
-    public Vector2 GetFramePositionForGraphics(float trackPosition)
+    public Vector2 GetCarriageTangent()
     {
-        return FramePosition(trackPosition);
+        // The attachment stays on the screen edge. Only the carriage face
+        // blends its angle across the last part of the two adjacent edges.
+        const float blendDistance = 0.42f;
+        float distance = DistanceOnTrack(currentTrackPos);
+        Vector2 before = FramePosition(TrackAtDistance(distance - blendDistance));
+        Vector2 after = FramePosition(TrackAtDistance(distance + blendDistance));
+        return (after - before).normalized;
     }
 
     public Vector2 GetArmElbowAnchor()

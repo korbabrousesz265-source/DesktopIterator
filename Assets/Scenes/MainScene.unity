@@ -592,10 +592,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::OracleArm
   puppetBody: {fileID: 1994669552}
-  connectionOffset: {x: 0, y: -0.15}
+  connectionOffset: {x: 0.21, y: -0.22}
   roomSizeInTiles: {x: 48, y: 35}
   roomPixelsPerUnit: 100
-  baseSlideSpeed: 0.38
+  carriageSpeed: 9
   currentTrackPos: 2.5
   segmentLengths:
   - 3
@@ -603,7 +603,7 @@ MonoBehaviour:
   - 0.9
   - 0.3
   jointGravity: 1.6
-  jointDamping: 2.4
+  jointDamping: 5.2
   inverseKinematicIterations: 18
   terrainCollisionMask:
     serializedVersion: 2
@@ -970,12 +970,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::OracleArmGraphics
   oracleArm: {fileID: 490677115}
-  shadowColor: {r: 0.12, g: 0.12, b: 0.13, a: 1}
-  baseMetalColor: {r: 0.34, g: 0.31, b: 0.27, a: 1}
-  highlightColor: {r: 0.57, g: 0.48, b: 0.35, a: 1}
-  pipeColor: {r: 0.23, g: 0.24, b: 0.24, a: 1}
-  rootThickness: 0.18
-  tipThickness: 0.071
+  shadowColor: {r: 0.105, g: 0.11, b: 0.13, a: 1}
+  baseMetalColor: {r: 0.29, g: 0.28, b: 0.27, a: 1}
+  highlightColor: {r: 0.39, g: 0.35, b: 0.30, a: 1}
+  pinColor: {r: 0.18, g: 0.19, b: 0.20, a: 1}
+  rootThickness: 0.164
+  tipThickness: 0.069
 --- !u!23 &923845878
 MeshRenderer:
   m_ObjectHideFlags: 0

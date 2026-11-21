@@ -51,10 +51,9 @@ public class PuppetDrag : MonoBehaviour
         newPos.x = Mathf.Clamp(newPos.x, minX, maxX);
         newPos.y = Mathf.Clamp(newPos.y, minY, maxY);
 
-        if (oracleArm != null && oracleArm.puppetBody == transform)
-            newPos = oracleArm.ConstrainDragPosition(newPos);
-
-        // 更新人偶位置
-        transform.position = newPos;
+        if (oracleArm != null && oracleArm.isActiveAndEnabled && oracleArm.puppetBody == transform)
+            oracleArm.RequestDragPosition(newPos);
+        else
+            transform.position = newPos;
     }
 }

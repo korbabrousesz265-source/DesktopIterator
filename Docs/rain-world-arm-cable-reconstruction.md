@@ -27,3 +27,9 @@ REA Evidence used:
 - The cable checks Unity 2D colliders when a terrain layer mask is assigned and always stays inside the visible camera rectangle. This gives the current scene useful constraints without importing Rain World's room engine.
 - The geometry follows the source's flat, layered mesh construction. The color values are a subdued SS-inspired palette approximation; the original game's live palette/darkness calculation is not available in this Unity scene.
 - REA inspection was static. The original game was not launched, and this Unity scene has not been rendered in the editor during this pass, so appearance and timing still require an in-editor comparison.
+
+## Arm-only follow-up
+
+- In the supplied Look to the Moon footage, the links near the puppet move at `00:09.50–00:10.00` while the carriage holds near the lower-right corner. The carriage turns and then slides along the bottom at `00:10.50–00:12.00`. Use `00:24` and `00:50` to compare folded silhouettes. The footage does not resolve the exact puppet-side pin or the identity of all dark lines visible around `02:30`.
+- REA member and call evidence `ev_854dbac61145420f17bff9536478b442327a1e5dfd46b79e4e4c16ac71d99780` identifies a distinct `ArmBase` renderer with supports and meshes, and separate link, joint, and cog drawing in `ArmJointGraphics`. `OracleArm.Update` reads separate puppet and base targets and updates the carriage movement state. These static observations help interpret the footage without assigning each visible line to a renderer.
+- The desktop adaptation keeps the rail on the viewport edge, blends carriage orientation through corners, and uses a reach threshold so the links can move before the carriage slides. The exposed side socket and the guide shoes are desktop designs. The existing trunk and fine-cord routes are outside this pass.

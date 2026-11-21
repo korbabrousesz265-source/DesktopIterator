@@ -6,12 +6,12 @@ using UnityEngine;
 public class OracleArmGraphics : MonoBehaviour
 {
     public OracleArm oracleArm;
-    public Color shadowColor = new Color(0.12f, 0.12f, 0.13f);
-    public Color baseMetalColor = new Color(0.34f, 0.31f, 0.27f);
-    public Color highlightColor = new Color(0.57f, 0.48f, 0.35f);
-    public Color pipeColor = new Color(0.23f, 0.24f, 0.24f);
-    [Min(0f)] public float rootThickness = 0.18f;
-    [Min(0f)] public float tipThickness = 0.071f;
+    public Color shadowColor = new Color(0.105f, 0.11f, 0.13f);
+    public Color baseMetalColor = new Color(0.29f, 0.28f, 0.27f);
+    public Color highlightColor = new Color(0.39f, 0.35f, 0.30f);
+    public Color pinColor = new Color(0.18f, 0.19f, 0.20f);
+    [Min(0f)] public float rootThickness = 0.164f;
+    [Min(0f)] public float tipThickness = 0.069f;
 
     private Mesh armMesh;
     private Material metalMaterial;
@@ -40,22 +40,21 @@ public class OracleArmGraphics : MonoBehaviour
         vertices.Clear();
         colors.Clear();
         triangles.Clear();
-        DrawMount(joints[0]);
+        DrawMount(joints[0], joints[1]);
 
         int links = joints.Length - 1;
         for (int i = 0; i < links; i++)
         {
             float thickness = Mathf.Lerp(rootThickness, tipThickness, i / (float)Mathf.Max(1, links - 1));
-            DrawLink(joints[i], joints[i + 1], thickness);
+            DrawLink(joints[i], joints[i + 1], thickness, i < links - 1);
         }
-        for (int i = 0; i <= links; i++)
+        for (int i = 0; i < links; i++)
         {
-            float radius = Mathf.Lerp(rootThickness * 0.78f, tipThickness * 0.65f, i / (float)links);
-            Disc(joints[i], radius, shadowColor, 12);
-            Disc(joints[i], radius * 0.78f, baseMetalColor, 12);
-            Disc(joints[i], radius * 0.39f, pipeColor, 8);
-            Disc(joints[i], radius * 0.17f, highlightColor, 6);
+            float radius = Mathf.Lerp(rootThickness * 0.61f, tipThickness * 0.52f, i / (float)links);
+            Vector2 axis = ((Vector2)(joints[i + 1] - joints[i])).normalized;
+            DrawBearing(joints[i], radius, axis);
         }
+        DrawBodySocket(joints[links]);
 
         armMesh.Clear();
         armMesh.SetVertices(vertices);
@@ -64,22 +63,28 @@ public class OracleArmGraphics : MonoBehaviour
         armMesh.RecalculateBounds();
     }
 
-    private void DrawMount(Vector2 root)
+    private void DrawMount(Vector2 root, Vector2 firstJoint)
     {
-        float track = Mathf.Repeat(oracleArm.currentTrackPos, 4f);
-        float edge = Mathf.Floor(track);
-        Vector2 tangent = (oracleArm.GetFramePositionForGraphics(edge + 0.75f) -
-            oracleArm.GetFramePositionForGraphics(edge + 0.25f)).normalized;
+        Vector2 tangent = oracleArm.GetCarriageTangent();
         Vector2 inward = new Vector2(tangent.y, -tangent.x);
-        Vector2 center = root + inward * 0.09f;
-        Quad(center, tangent, inward, 0.48f, 0.24f, shadowColor);
-        Quad(center, tangent, inward, 0.41f, 0.17f, baseMetalColor);
-        Quad(center + inward * 0.068f, tangent, inward, 0.41f, 0.016f, highlightColor);
-        Disc(center + tangent * 0.16f, 0.024f, pipeColor, 8);
-        Disc(center - tangent * 0.16f, 0.024f, pipeColor, 8);
+        Vector2 yoke = root + inward * 0.145f;
+        Vector2 neck = Vector2.MoveTowards(root, firstJoint, 0.35f);
+        for (int side = -1; side <= 1; side += 2)
+        {
+            Vector2 shoe = root + tangent * (side * 0.185f) + inward * 0.042f;
+            Vector2 bracket = yoke + tangent * (side * 0.135f);
+            Bar(shoe, bracket, 0.083f, pinColor);
+            Bar(bracket, neck, 0.043f, shadowColor);
+            Quad(shoe, tangent, inward, 0.195f, 0.15f, shadowColor);
+            Quad(shoe + inward * 0.01f, tangent, inward, 0.15f, 0.105f, baseMetalColor);
+            Quad(shoe + inward * 0.046f, tangent, inward, 0.095f, 0.021f, highlightColor);
+            Disc(bracket, 0.027f, pinColor, 8);
+        }
+        Quad(yoke, tangent, inward, 0.38f, 0.102f, shadowColor);
+        Quad(yoke + inward * 0.014f, tangent, inward, 0.32f, 0.061f, baseMetalColor);
     }
 
-    private void DrawLink(Vector2 start, Vector2 end, float width)
+    private void DrawLink(Vector2 start, Vector2 end, float width, bool hasFaceplate)
     {
         Vector2 displacement = end - start;
         float length = displacement.magnitude;
@@ -88,17 +93,67 @@ public class OracleArmGraphics : MonoBehaviour
 
         Vector2 axis = displacement / length;
         Vector2 side = new Vector2(-axis.y, axis.x);
-        Quad(Vector2.Lerp(start, end, 0.5f), axis, side, length, width * 0.50f, shadowColor);
-        Quad(Vector2.Lerp(start, end, 0.50f), axis, side, length * 0.95f, width * 0.21f, pipeColor);
+        Bar(start, end, width * 0.47f, pinColor);
+        if (!hasFaceplate)
+        {
+            Bar(Vector2.Lerp(start, end, 0.11f), Vector2.Lerp(start, end, 0.89f),
+                width * 0.71f, baseMetalColor);
+            return;
+        }
 
-        // The housing overlaps the exposed shaft. Separate end collars give
-        // the segments a clear mechanical silhouette even at desktop scale.
-        Quad(Vector2.Lerp(start, end, 0.35f), axis, side, length * 0.53f, width, shadowColor);
-        Quad(Vector2.Lerp(start, end, 0.35f), axis, side, length * 0.50f, width * 0.77f, baseMetalColor);
-        Quad(Vector2.Lerp(start, end, 0.35f) + side * width * 0.30f,
-            axis, side, length * 0.45f, width * 0.12f, highlightColor);
-        Quad(Vector2.Lerp(start, end, 0.60f), axis, side, Mathf.Min(0.08f, length * 0.1f), width * 1.12f, shadowColor);
-        Quad(Vector2.Lerp(start, end, 0.62f), axis, side, Mathf.Min(0.04f, length * 0.06f), width * 0.90f, baseMetalColor);
+        Faceplate(start, end, side, width, shadowColor);
+        Faceplate(Vector2.Lerp(start, end, 0.018f), Vector2.Lerp(start, end, 0.982f),
+            side, width * 0.74f, baseMetalColor);
+        Quad(Vector2.Lerp(start, end, 0.26f) + side * width * 0.19f,
+            axis, side, length * 0.23f, width * 0.13f, highlightColor);
+        Quad(Vector2.Lerp(start, end, 0.82f), axis, side,
+            Mathf.Min(0.085f, length * 0.11f), width * 0.57f, pinColor);
+    }
+
+    private void Faceplate(Vector2 start, Vector2 end, Vector2 side, float width, Color color)
+    {
+        int first = vertices.Count;
+        AddRow(Vector2.Lerp(start, end, 0.052f), side, width * 0.22f, color);
+        AddRow(Vector2.Lerp(start, end, 0.16f), side, width * 0.50f, color);
+        AddRow(Vector2.Lerp(start, end, 0.62f), side, width * 0.29f, color);
+        AddRow(Vector2.Lerp(start, end, 0.84f), side, width * 0.41f, color);
+        AddRow(Vector2.Lerp(start, end, 0.947f), side, width * 0.19f, color);
+        for (int i = first; i < first + 8; i += 2)
+        {
+            Triangle(i, i + 1, i + 2);
+            Triangle(i + 2, i + 1, i + 3);
+        }
+    }
+
+    private void AddRow(Vector2 center, Vector2 side, float halfWidth, Color color)
+    {
+        Vertex(center - side * halfWidth, color);
+        Vertex(center + side * halfWidth, color);
+    }
+
+    private void DrawBearing(Vector2 center, float radius, Vector2 axis)
+    {
+        Disc(center, radius, shadowColor, 10);
+        Disc(center, radius * 0.68f, pinColor, 8);
+        Quad(center, axis, new Vector2(-axis.y, axis.x), radius * 0.82f, radius * 0.22f, highlightColor);
+    }
+
+    private void DrawBodySocket(Vector2 tip)
+    {
+        // Set the cuff just behind the robe edge and keep the pin outside it.
+        Quad(tip + Vector2.left * 0.027f, Vector2.right, Vector2.up, 0.168f, 0.118f, shadowColor);
+        Quad(tip + Vector2.left * 0.034f, Vector2.right, Vector2.up, 0.126f, 0.079f, baseMetalColor);
+        DrawBearing(tip, 0.045f, Vector2.up);
+    }
+
+    private void Bar(Vector2 start, Vector2 end, float width, Color color)
+    {
+        Vector2 delta = end - start;
+        float length = delta.magnitude;
+        if (length < 0.0001f)
+            return;
+        Vector2 axis = delta / length;
+        Quad((start + end) * 0.5f, axis, new Vector2(-axis.y, axis.x), length, width, color);
     }
 
     private void Quad(Vector2 center, Vector2 axis, Vector2 side, float length, float width, Color color)
