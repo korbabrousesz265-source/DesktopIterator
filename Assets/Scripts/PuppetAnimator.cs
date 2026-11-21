@@ -9,6 +9,10 @@ public class PuppetAnimator : MonoBehaviour
     public Transform eyeRight;
     public Transform shoulderLeft;
     public Transform shoulderRight;
+    [SerializeField] private SpriteRenderer sleeveLeft;
+    [SerializeField] private SpriteRenderer sleeveRight;
+    [SerializeField] private Transform handLeft;
+    [SerializeField] private Transform handRight;
 
     [Header("静置呼吸")]
     [Min(0f)] public float floatAmplitude = 0.012f;
@@ -112,6 +116,32 @@ public class PuppetAnimator : MonoBehaviour
             eyeRight.localScale = new Vector3(eyeRightStartScale.x,
                 eyeRightStartScale.y * Mathf.Lerp(1f, 0.08f, blink), eyeRightStartScale.z);
         }
+    }
+
+    private void LateUpdate()
+    {
+        PoseArm(shoulderLeft, sleeveLeft, handLeft, -1f);
+        PoseArm(shoulderRight, sleeveRight, handRight, 1f);
+    }
+
+    private void PoseArm(Transform shoulder, SpriteRenderer sleeve, Transform hand, float side)
+    {
+        if (shoulder == null || sleeve == null || sleeve.sprite == null || hand == null)
+            return;
+
+        float swing = Mathf.Sin(Time.time * 1.4f + side * 0.7f) * 0.07f;
+        Vector3 direction = transform.TransformDirection(
+            new Vector3(side * 0.44f + swing, -1f, 0f).normalized);
+        Vector3 wrist = shoulder.position + direction * 0.235f;
+        hand.position = wrist;
+
+        // The sleeve sprite's pivot is in a corner, so align its visible
+        // center with the arm segment after setting its rotation and scale.
+        Bounds bounds = sleeve.sprite.bounds;
+        Transform cloth = sleeve.transform;
+        cloth.rotation = Quaternion.FromToRotation(Vector3.down, direction);
+        cloth.position = Vector3.Lerp(shoulder.position, wrist, 0.46f) -
+            cloth.TransformVector(bounds.center);
     }
 
     private Vector3 GetEyeLocalOffset(Vector3 worldDirection)

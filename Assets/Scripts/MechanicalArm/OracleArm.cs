@@ -35,8 +35,6 @@ public class OracleArm : MonoBehaviour
     private bool initialized;
     private readonly Collider2D[] collisionBuffer = new Collider2D[8];
 
-    private const float CornerTrackRadius = 0.1f;
-    private const float ScreenMargin = 0.08f;
 
     private void Start()
     {
@@ -48,7 +46,7 @@ public class OracleArm : MonoBehaviour
         jointVelocities = new Vector2[linkCount + 1];
         RefreshRoomFrame();
 
-        currentTrackPos = Mathf.Repeat(currentTrackPos, 4f);
+        currentTrackPos = ClosestTrackPosition(GetBodyTarget());
         Vector2 root = FramePosition(currentTrackPos);
         Vector2 target = GetBodyTarget();
         InitializeChain(root, target);
@@ -85,11 +83,28 @@ public class OracleArm : MonoBehaviour
 
         currentTrackPos = MoveOnTrack(currentTrackPos, desiredTrack, baseSlideSpeed * Time.deltaTime);
         Vector2 root = FramePosition(currentTrackPos);
+        // The carriage must catch up when a dragged puppet would otherwise pull the
+        // rigid arm beyond its reach.
+        if (Vector2.Distance(root, target) > TotalLength() - 0.01f)
+        {
+            currentTrackPos = desiredTrack;
+            root = FramePosition(currentTrackPos);
+        }
         SolveArm(root, target, Time.deltaTime);
     }
 
     private void RefreshRoomFrame()
     {
+        if (mainCam != null && mainCam.orthographic)
+        {
+            Vector3 bottomLeft = mainCam.ViewportToWorldPoint(new Vector3(0f, 0f, -mainCam.transform.position.z));
+            Vector3 topRight = mainCam.ViewportToWorldPoint(new Vector3(1f, 1f, -mainCam.transform.position.z));
+            cornerPositions[0] = new Vector2(bottomLeft.x, topRight.y);
+            cornerPositions[1] = new Vector2(topRight.x, topRight.y);
+            cornerPositions[2] = new Vector2(topRight.x, bottomLeft.y);
+            cornerPositions[3] = new Vector2(bottomLeft.x, bottomLeft.y);
+            return;
+        }
         float pixelScale = 1f / Mathf.Max(1f, roomPixelsPerUnit);
         float tileSize = 20f * pixelScale;
 
@@ -161,23 +176,20 @@ public class OracleArm : MonoBehaviour
             jointVelocities[i] += Vector2.down * jointGravity * dt;
             jointVelocities[i] *= Mathf.Exp(-jointDamping * dt);
             solvedPositions[i] += jointVelocities[i] * dt;
-            solvedPositions[i] = ClampToView(solvedPositions[i]);
         }
 
         float totalLength = TotalLength();
         Vector2 rootToTarget = target - root;
-        Vector2 endpoint = target;
         if (rootToTarget.magnitude >= totalLength)
         {
             Vector2 direction = rootToTarget.sqrMagnitude < 0.0001f ? Vector2.down : rootToTarget.normalized;
-            endpoint = root + direction * totalLength;
             solvedPositions[0] = root;
             for (int i = 0; i < segmentLengths.Length; i++)
                 solvedPositions[i + 1] = solvedPositions[i] + direction * Mathf.Max(0.01f, segmentLengths[i]);
         }
         else
         {
-            int iterations = Mathf.Clamp(inverseKinematicIterations, 4, 48);
+            int iterations = Mathf.Max(inverseKinematicIterations, 64);
             for (int iteration = 0; iteration < iterations; iteration++)
             {
                 solvedPositions[pointCount - 1] = target;
@@ -201,12 +213,18 @@ public class OracleArm : MonoBehaviour
                 }
 
                 for (int i = 1; i < pointCount - 1; i++)
-                    solvedPositions[i] = ResolveTerrainCollision(ClampToView(solvedPositions[i]));
+                    solvedPositions[i] = ResolveTerrainCollision(solvedPositions[i]);
+                if (Vector2.Distance(solvedPositions[pointCount - 1], target) < 0.0001f)
+                    break;
             }
+
+            if (terrainCollisionMask.value == 0 &&
+                Vector2.Distance(solvedPositions[pointCount - 1], target) > 0.0001f)
+                CloseChain(root, target);
         }
 
-        // Keep the body endpoint exact while retaining the original four fixed link lengths.
-        solvedPositions[pointCount - 1] = endpoint;
+        // The forward pass preserves every rigid link. Forcing the final point to
+        // the target here would stretch the last link when the solver has not converged.
         for (int i = 0; i < pointCount; i++)
         {
             if (dt > 0f && i > 0 && i < pointCount - 1)
@@ -215,17 +233,46 @@ public class OracleArm : MonoBehaviour
         }
     }
 
-    private Vector2 ClampToView(Vector2 point)
+    private void CloseChain(Vector2 root, Vector2 target)
     {
-        if (mainCam == null || !mainCam.orthographic)
-            return point;
+        Vector2 current = root;
+        for (int i = 0; i < segmentLengths.Length - 1; i++)
+        {
+            float length = Mathf.Max(0.01f, segmentLengths[i]);
+            float remaining = 0f;
+            float longest = 0f;
+            for (int j = i + 1; j < segmentLengths.Length; j++)
+            {
+                float nextLength = Mathf.Max(0.01f, segmentLengths[j]);
+                remaining += nextLength;
+                longest = Mathf.Max(longest, nextLength);
+            }
 
-        Vector2 center = mainCam.transform.position;
-        float halfHeight = mainCam.orthographicSize - ScreenMargin;
-        float halfWidth = mainCam.orthographicSize * mainCam.aspect - ScreenMargin;
-        point.x = Mathf.Clamp(point.x, center.x - halfWidth, center.x + halfWidth);
-        point.y = Mathf.Clamp(point.y, center.y - halfHeight, center.y + halfHeight);
-        return point;
+            Vector2 preferred = (solvedPositions[i + 1] - current).normalized;
+            Vector2 toTarget = target - current;
+            float distance = toTarget.magnitude;
+            Vector2 direction = preferred.sqrMagnitude > 0f ? preferred : Vector2.down;
+            if (distance > 0.00001f)
+            {
+                // Limit the angle so the following links can still reach the tip.
+                float minimum = Mathf.Max(0f, 2f * longest - remaining);
+                float lengthSquares = distance * distance + length * length;
+                float denominator = 2f * distance * length;
+                float minCosine = Mathf.Clamp((lengthSquares - remaining * remaining) / denominator, -1f, 1f);
+                float maxCosine = Mathf.Clamp((lengthSquares - minimum * minimum) / denominator, -1f, 1f);
+                Vector2 axis = toTarget / distance;
+                Vector2 normal = new Vector2(-axis.y, axis.x);
+                float cosine = Mathf.Clamp(Vector2.Dot(direction, axis), minCosine, maxCosine);
+                float sine = Mathf.Sqrt(Mathf.Max(0f, 1f - cosine * cosine));
+                direction = axis * cosine + normal * (sine * Mathf.Sign(Vector2.Dot(direction, normal)));
+            }
+
+            current += direction * length;
+            solvedPositions[i + 1] = current;
+        }
+
+        float lastLength = Mathf.Max(0.01f, segmentLengths[segmentLengths.Length - 1]);
+        solvedPositions[solvedPositions.Length - 1] = Vector2.MoveTowards(current, target, lastLength);
     }
 
     private Vector2 ResolveTerrainCollision(Vector2 point)
@@ -299,39 +346,24 @@ public class OracleArm : MonoBehaviour
     private Vector2 FramePosition(float trackPosition)
     {
         float track = Mathf.Repeat(trackPosition, 4f);
-        float nearestCorner = Mathf.Round(track);
-        float offsetFromCorner = track - nearestCorner;
-        int cornerIndex = ((int)nearestCorner % 4 + 4) % 4;
+        int trackEdge = Mathf.FloorToInt(track);
+        return Vector2.Lerp(cornerPositions[trackEdge], cornerPositions[(trackEdge + 1) % 4], track - trackEdge);
+    }
 
-        if (Mathf.Abs(offsetFromCorner) <= CornerTrackRadius)
+    public Vector3 ConstrainDragPosition(Vector3 position)
+    {
+        RefreshRoomFrame();
+        Vector2 target = (Vector2)position + connectionOffset;
+        Vector2 root = FramePosition(ClosestTrackPosition(target));
+        Vector2 delta = target - root;
+        float reach = Mathf.Max(0.01f, TotalLength() - 0.02f);
+        if (delta.magnitude > reach)
         {
-            Vector2 corner = cornerPositions[cornerIndex];
-            Vector2 previous = cornerPositions[(cornerIndex + 3) % 4];
-            Vector2 next = cornerPositions[(cornerIndex + 1) % 4];
-            Vector2 incoming = (corner - previous).normalized;
-            Vector2 outgoing = (next - corner).normalized;
-            float incomingRadius = Vector2.Distance(previous, corner) * CornerTrackRadius;
-            float outgoingRadius = Vector2.Distance(corner, next) * CornerTrackRadius;
-            float t = Mathf.InverseLerp(-CornerTrackRadius, CornerTrackRadius, offsetFromCorner);
-            Vector2 a = corner - incoming * incomingRadius;
-            Vector2 b = corner + outgoing * outgoingRadius;
-            float inverse = 1f - t;
-            return inverse * inverse * a + 2f * inverse * t * corner + t * t * b;
+            Vector2 constrained = root + delta.normalized * reach - connectionOffset;
+            position.x = constrained.x;
+            position.y = constrained.y;
         }
-
-        int edge = Mathf.FloorToInt(track);
-        float edgeT = track - edge;
-        Vector2 edgeStart = cornerPositions[edge];
-        Vector2 edgeEnd = cornerPositions[(edge + 1) % 4];
-        Vector2 edgeDirection = (edgeEnd - edgeStart).normalized;
-        Vector2 previousCorner = cornerPositions[(edge + 3) % 4];
-        Vector2 nextDirection = (cornerPositions[(edge + 2) % 4] - edgeEnd).normalized;
-        float startRadius = Vector2.Distance(previousCorner, edgeStart) * CornerTrackRadius;
-        float endRadius = Vector2.Distance(edgeEnd, cornerPositions[(edge + 2) % 4]) * CornerTrackRadius;
-        Vector2 start = edgeStart + edgeDirection * startRadius;
-        Vector2 end = edgeEnd - edgeDirection * endRadius;
-        float linearT = Mathf.InverseLerp(CornerTrackRadius, 1f - CornerTrackRadius, edgeT);
-        return Vector2.Lerp(start, end, linearT);
+        return position;
     }
 
     public Vector2 GetBoundaryAnchor()
@@ -344,7 +376,7 @@ public class OracleArm : MonoBehaviour
         Vector2 center = mainCam.transform.position;
         float halfWidth = mainCam.orthographicSize * mainCam.aspect;
         float halfHeight = mainCam.orthographicSize;
-        return center + new Vector2(halfWidth * 0.92f, halfHeight * 0.9f);
+        return center + new Vector2(halfWidth * 0.94f, halfHeight);
     }
 
     public Vector2 GetFramePositionForGraphics(float trackPosition)

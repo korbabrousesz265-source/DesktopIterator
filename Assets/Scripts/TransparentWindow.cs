@@ -75,7 +75,7 @@ public class TransparentWindow : MonoBehaviour
             Vector2 mousePos = mainCam.ScreenToWorldPoint(Input.mousePosition);
             Collider2D hit = Physics2D.OverlapPoint(mousePos);
 
-            if (hit != null)
+            if (hit != null || (!isClickThrough && Input.GetMouseButton(0)))
             {
                 if (isClickThrough)
                 {
