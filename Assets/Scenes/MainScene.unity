@@ -970,11 +970,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::OracleArmGraphics
   oracleArm: {fileID: 490677115}
-  shadowColor: {r: 0.105, g: 0.11, b: 0.13, a: 1}
-  baseMetalColor: {r: 0.29, g: 0.28, b: 0.27, a: 1}
-  highlightColor: {r: 0.39, g: 0.35, b: 0.30, a: 1}
-  pinColor: {r: 0.18, g: 0.19, b: 0.20, a: 1}
-  rootThickness: 0.164
+  shadowColor: {r: 0.105, g: 0.104, b: 0.106, a: 1}
+  baseMetalColor: {r: 0.32, g: 0.31, b: 0.29, a: 1}
+  highlightColor: {r: 0.40, g: 0.39, b: 0.37, a: 1}
+  pinColor: {r: 0.18, g: 0.18, b: 0.19, a: 1}
+  rootThickness: 0.184
   tipThickness: 0.069
 --- !u!23 &923845878
 MeshRenderer:
