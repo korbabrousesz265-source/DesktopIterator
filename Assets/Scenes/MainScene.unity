@@ -908,10 +908,10 @@ MonoBehaviour:
   trunkHighlightColor: {r: 0.32, g: 0.31, b: 0.29, a: 1}
   trunkWidth: 0.082
   cordColors:
-  - {r: 0.46, g: 0.36, b: 0.28, a: 1}
-  - {r: 0.30, g: 0.38, b: 0.40, a: 1}
-  - {r: 0.41, g: 0.27, b: 0.25, a: 1}
-  cordWidth: 0.015
+  - {r: 0.54, g: 0.16, b: 0.20, a: 1}
+  - {r: 0.19, g: 0.28, b: 0.55, a: 1}
+  - {r: 0.24, g: 0.23, b: 0.25, a: 1}
+  cordWidth: 0.011
 --- !u!4 &719272508
 Transform:
   m_ObjectHideFlags: 0
@@ -1287,7 +1287,7 @@ MonoBehaviour:
   puppetHead: {fileID: 351896725}
   trunkSegments: 80
   elbowIndex: 60
-  smallCordCount: 5
+  smallCordCount: 14
   smallCordSegments: 20
   trunkPos: []
 --- !u!4 &1020775471

@@ -12,7 +12,7 @@ public class OracleUmbilical : MonoBehaviour
 
     [Min(3)] public int trunkSegments = 80;
     [Min(1)] public int elbowIndex = 60;
-    [Min(0)] public int smallCordCount = 5;
+    [Min(0)] public int smallCordCount = 14;
     [Min(2)] public int smallCordSegments = 20;
     [Tooltip("Rest length as a multiple of the viewport reach. Rain World's 790 px cord in a " +
              "1200 x 800 room is about 0.65 of that diagonal; the desktop value is larger so a " +
@@ -38,15 +38,39 @@ public class OracleUmbilical : MonoBehaviour
     private float segmentLength;
     private float accumulatedTime;
     private bool initialized;
+    private SSOraclePetBrain puppetBrain;
+    private FineCord[] fineCords;
+    private Vector2 lastFineHead;
+    private float fineCordReach = float.PositiveInfinity;
 
     private void Start()
     {
         trunkPos = new Vector2[Mathf.Max(3, trunkSegments)];
         previousPositions = new Vector2[trunkPos.Length];
         view = Camera.main;
+        if (puppetBody != null)
+            puppetBrain = puppetBody.GetComponent<SSOraclePetBrain>();
         smallCordsPos = new Vector2[Mathf.Max(0, smallCordCount)][];
-        for (int i = 0; i < smallCordsPos.Length; i++)
-            smallCordsPos[i] = new Vector2[Mathf.Max(2, smallCordSegments)];
+        fineCords = new FineCord[smallCordsPos.Length];
+        int pointCount = Mathf.Max(2, smallCordSegments);
+        for (int i = 0; i < fineCords.Length; i++)
+        {
+            int pair = i / 2;
+            bool shortCord = i % 2 == 0;
+            int groupCount = (fineCords.Length + (shortCord ? 1 : 0)) / 2;
+            // Sample the centers of the source distribution's quantiles so the
+            // desktop bundle has repeatable lengths without taking both extremes.
+            float rank = (pair + 0.5f) / groupCount;
+            float lengthPixels = shortCord ? Mathf.Lerp(50f, 65f, rank)
+                : Mathf.Lerp(50f, 200f, Mathf.Pow(rank, 1.5f));
+            float length = lengthPixels * ((pointCount - 1f) / pointCount) / 100f;
+            float side = (pair + i % 2) % 2 == 0 ? -1f : 1f;
+            float heading = i * 2.4f;
+            Vector2 socketBias = new Vector2(Mathf.Cos(heading), Mathf.Sin(heading)) * 0.72f;
+            fineCords[i] = new FineCord(pointCount, length, side, socketBias);
+            smallCordsPos[i] = fineCords[i].Points;
+            fineCordReach = Mathf.Min(fineCordReach, length * 0.94f);
+        }
     }
 
     private void LateUpdate()
@@ -91,37 +115,205 @@ public class OracleUmbilical : MonoBehaviour
             lastReceiver = receiver;
             lastMount = mount;
             lastBounds = bounds;
+            lastFineHead = head;
+            foreach (FineCord cord in fineCords)
+                cord.Reset(trunkPos[last], head, bounds);
             initialized = true;
         }
 
         accumulatedTime += Mathf.Min(0.05f, Time.deltaTime);
         int steps = Mathf.FloorToInt(accumulatedTime / StepSeconds);
+        Vector2 look = puppetBrain == null
+            ? Vector2.zero
+            : ((Vector2)puppetBrain.GazePoint - head).normalized * puppetBrain.AttentionWeight;
         for (int step = 1; step <= steps; step++)
         {
             float t = step / (float)steps;
+            Vector2 steppedHead = Vector2.Lerp(lastFineHead, head, t);
             Simulate(outlet, guide, mount, Vector2.Lerp(lastGuide, guidePoint, t),
-                Vector2.Lerp(lastReceiver, receiver, t), bounds);
+                Vector2.Lerp(lastReceiver, receiver, t), steppedHead, bounds);
+            Vector2 trunkTangent = (trunkPos[last] - trunkPos[last - 1]).normalized;
+            foreach (FineCord cord in fineCords)
+                cord.Step(trunkPos[last], trunkTangent, steppedHead, look, bounds);
         }
         if (steps > 0)
         {
             accumulatedTime -= steps * StepSeconds;
             lastGuide = guidePoint;
             lastReceiver = receiver;
+            lastFineHead = head;
         }
         trunkPos[0] = mount;
         trunkPos[guide] = guidePoint;
 
-        // Keep the thin lines on the moving end of the trunk near the head.
-        for (int cord = 0; cord < smallCordsPos.Length; cord++)
-        {
-            float spread = smallCordsPos.Length <= 1 ? 0.5f : cord / (float)(smallCordsPos.Length - 1);
-            Vector2 start = Vector2.Lerp(trunkPos[last - 1], trunkPos[last], spread);
-            Vector2 end = head + new Vector2(Mathf.Lerp(-0.035f, 0.035f, spread), -0.02f);
-            Vector2 bow = new Vector2(0f, Mathf.Lerp(-0.09f, 0.12f, spread));
+        // The render endpoints follow the sockets even on a frame without a physics tick.
+        foreach (FineCord cord in fineCords)
+            cord.Pin(trunkPos[last], head);
+    }
 
-            Vector2[] points = smallCordsPos[cord];
-            for (int i = 0; i < points.Length; i++)
-                points[i] = SampleSpan(start, end, bow, i / (float)(points.Length - 1));
+    private sealed class FineCord
+    {
+        private const int ConstraintPasses = 32;
+        public Vector2[] Points { get; }
+        private readonly Vector2[] previous;
+        private readonly Vector2[] directions;
+        private readonly float[] upper;
+        private readonly float[] tension;
+        private readonly float restLength;
+        private readonly float initialSide;
+        private readonly Vector2 headBias;
+
+        public FineCord(int pointCount, float restLength, float initialSide, Vector2 headBias)
+        {
+            Points = new Vector2[pointCount];
+            previous = new Vector2[pointCount];
+            directions = new Vector2[pointCount - 1];
+            upper = new float[pointCount - 1];
+            tension = new float[pointCount - 1];
+            this.restLength = restLength;
+            this.initialSide = initialSide;
+            this.headBias = headBias;
+        }
+
+        public void Pin(Vector2 outlet, Vector2 head)
+        {
+            Points[0] = outlet;
+            Points[Points.Length - 1] = head;
+        }
+
+        public void Reset(Vector2 outlet, Vector2 head, Rect bounds)
+        {
+            Vector2 span = head - outlet;
+            Vector2 along = span.sqrMagnitude > 0.000001f ? span.normalized : Vector2.up;
+            Vector2 normal = new Vector2(-along.y, along.x) * initialSide;
+            float height = Mathf.Sqrt(Mathf.Max(0f, restLength * restLength - span.sqrMagnitude)) * 0.44f;
+            int last = Points.Length - 1;
+            for (int i = 1; i < last; i++)
+            {
+                float t = i / (float)last;
+                Vector2 sag = normal * (height * Mathf.Sin(t * Mathf.PI));
+                Points[i] = KeepInside(Vector2.Lerp(outlet, head, t) + sag, bounds);
+            }
+            Pin(outlet, head);
+            Points.CopyTo(previous, 0);
+        }
+
+        public void Step(Vector2 outlet, Vector2 tangent, Vector2 head, Vector2 look, Rect bounds)
+        {
+            int last = Points.Length - 1;
+            Vector2 span = head - outlet;
+            Vector2 headward = span.normalized;
+            Vector2 headExit = (-headward + headBias - look).normalized;
+            bool taut = span.sqrMagnitude >= restLength * restLength;
+            Vector2 outletMove = outlet - Points[0];
+            Vector2 headMove = head - Points[last];
+            // A desktop position jump moves the whole bundle's reference frame.
+            // Shift its history too so the jump does not become an impulse.
+            bool jumped = Mathf.Max(outletMove.sqrMagnitude, headMove.sqrMagnitude) > 0.14f * 0.14f;
+            for (int i = 1; i < last; i++)
+            {
+                if (jumped)
+                {
+                    Vector2 shift = Vector2.Lerp(outletMove, headMove, i / (float)last);
+                    Points[i] += shift;
+                    previous[i] += shift;
+                }
+                Vector2 position = Points[i];
+                Vector2 displacement = position - previous[i];
+                previous[i] = position;
+                if (taut)
+                {
+                    Points[i] = Vector2.Lerp(outlet, head, i / (float)last);
+                    continue;
+                }
+                float speed = displacement.magnitude / StepSeconds;
+                float damping = Mathf.Lerp(0.994f, 0.966f, Mathf.InverseLerp(0.8f, 2.4f, speed));
+                Vector2 drive = tangent * (Mathf.Max(0, 4 - i) * 15f)
+                    + headExit * (Mathf.Max(0, i - last + 3) * 10f);
+                Points[i] = KeepInside(position + Vector2.ClampMagnitude(displacement * damping, 0.065f)
+                    + drive * (StepSeconds * StepSeconds), bounds);
+            }
+            Pin(outlet, head);
+            if (taut)
+                return;
+
+            float spacing = restLength / last;
+            for (int pass = 0; pass < ConstraintPasses; pass++)
+            {
+                for (int i = 0; i < last - 1; i++)
+                    Relax(i, i + 2, last, spacing * 1.67f, bendOnly: true);
+                if ((pass & 1) == 0)
+                    for (int i = 0; i < last - 3; i++)
+                        Relax(i, i + 4, last, spacing * 3.24f, bendOnly: true);
+                for (int i = 0; i < last; i++)
+                {
+                    int a = (pass & 1) == 0 ? i : last - 1 - i;
+                    Relax(a, a + 1, last, spacing, bendOnly: false);
+                }
+                for (int i = 1; i < last; i++)
+                    Points[i] = KeepInside(Points[i], bounds);
+            }
+            if (last > 1)
+                ResolveTension(last, spacing, bounds);
+        }
+
+        private void ResolveTension(int last, float spacing, Rect bounds)
+        {
+            for (int pass = 0; pass < 8; pass++)
+            {
+                float maxError = 0f;
+                for (int i = 0; i < last; i++)
+                {
+                    Vector2 delta = Points[i + 1] - Points[i];
+                    float length = delta.magnitude;
+                    directions[i] = length > 0.00001f ? delta / length : Vector2.right;
+                    tension[i] = spacing - length;
+                    maxError = Mathf.Max(maxError, Mathf.Abs(tension[i]));
+                }
+                if (maxError <= spacing * 0.005f)
+                    return;
+
+                // Each link shares one free point with the next. Solve their
+                // coupled distance corrections at once, with both sockets fixed.
+                for (int i = 0; i < last; i++)
+                {
+                    float diagonal = i == 0 || i == last - 1 ? 1f : 2f;
+                    float coupling = i + 1 < last ? -Vector2.Dot(directions[i], directions[i + 1]) : 0f;
+                    if (i > 0)
+                    {
+                        float lower = -Vector2.Dot(directions[i], directions[i - 1]);
+                        diagonal -= lower * upper[i - 1];
+                        tension[i] -= lower * tension[i - 1];
+                    }
+                    float inverse = 1f / Mathf.Max(0.001f, diagonal);
+                    upper[i] = coupling * inverse;
+                    tension[i] *= inverse;
+                }
+                for (int i = last - 2; i >= 0; i--)
+                    tension[i] -= upper[i] * tension[i + 1];
+                for (int i = 1; i < last; i++)
+                {
+                    Vector2 movement = directions[i - 1] * tension[i - 1] - directions[i] * tension[i];
+                    Points[i] = KeepInside(Points[i] + Vector2.ClampMagnitude(movement, spacing * 1.5f), bounds);
+                }
+            }
+        }
+
+        private void Relax(int a, int b, int last, float spacing, bool bendOnly)
+        {
+            float aWeight = a == 0 ? 0f : 1f;
+            float bWeight = b == last ? 0f : 1f;
+            float totalWeight = aWeight + bWeight;
+            if (totalWeight == 0f)
+                return;
+            Vector2 delta = Points[b] - Points[a];
+            float length = delta.magnitude;
+            if (length < 0.00001f || (bendOnly && length >= spacing))
+                return;
+            float strength = bendOnly ? 0.30f : 1f;
+            Vector2 correction = delta * ((1f - spacing / length) * (strength / totalWeight));
+            Points[a] += correction * aWeight;
+            Points[b] -= correction * bWeight;
         }
     }
 
@@ -156,14 +348,22 @@ public class OracleUmbilical : MonoBehaviour
         Vector2 receiver = new Vector2(x, y);
         if ((receiver - head).sqrMagnitude < 0.48f * 0.48f)
             receiver.x = Mathf.Clamp(head.x - receiverSide * 0.53f, bounds.xMin + margin, bounds.xMax - margin);
-        return receiver;
+        return head + Vector2.ClampMagnitude(receiver - head, fineCordReach * 0.86f);
     }
 
-    private void Simulate(int outlet, int guide, Vector2 mount, Vector2 armPoint, Vector2 receiver, Rect bounds)
+    private void Simulate(int outlet, int guide, Vector2 mount, Vector2 armPoint, Vector2 receiver,
+        Vector2 head, Rect bounds)
     {
         int last = trunkPos.Length - 1;
+        Vector2 tipShift = LimitTrunkTip(trunkPos[last], receiver, head) - trunkPos[last];
         for (int i = outlet + 1; i <= last; i++)
         {
+            if (i > guide && tipShift.sqrMagnitude > 0.14f * 0.14f)
+            {
+                Vector2 shift = tipShift * ((i - guide) / (float)(last - guide));
+                trunkPos[i] += shift;
+                previousPositions[i] += shift;
+            }
             Vector2 point = trunkPos[i];
             Vector2 velocity = Vector2.ClampMagnitude((point - previousPositions[i]) * 0.983f, 0.105f);
             previousPositions[i] = point;
@@ -192,8 +392,22 @@ public class OracleUmbilical : MonoBehaviour
             for (int i = outlet + 1; i <= last; i++)
                 if (i != guide)
                     trunkPos[i] = KeepInside(trunkPos[i], bounds);
-            trunkPos[last] = receiver + Vector2.ClampMagnitude(trunkPos[last] - receiver, ReceiverLeash);
+            trunkPos[last] = LimitTrunkTip(trunkPos[last], receiver, head);
         }
+    }
+
+    private Vector2 LimitTrunkTip(Vector2 tip, Vector2 receiver, Vector2 head)
+    {
+        tip = receiver + Vector2.ClampMagnitude(tip - receiver, ReceiverLeash);
+        if (fineCords.Length == 0)
+            return tip;
+
+        // Keep the exposed bundle clear of the head and within its shortest strand.
+        Vector2 fromHead = tip - head;
+        float distance = fromHead.magnitude;
+        Vector2 direction = distance > 0.001f ? fromHead / distance : (receiver - head).normalized;
+        float minimum = Mathf.Min(0.28f, fineCordReach * 0.8f);
+        return head + direction * Mathf.Clamp(distance, minimum, fineCordReach);
     }
 
     private void ConstrainDistance(int a, int b, int outlet, int guide, float length, bool bendOnly)
@@ -261,19 +475,5 @@ public class OracleUmbilical : MonoBehaviour
         const float clearance = 0.03f;
         return new Vector2(Mathf.Clamp(point.x, bounds.xMin + clearance, bounds.xMax - clearance),
             Mathf.Clamp(point.y, bounds.yMin + clearance, bounds.yMax - clearance));
-    }
-
-    private static Vector2 SampleSpan(Vector2 start, Vector2 end, Vector2 bow, float t)
-    {
-        Vector2 chord = end - start;
-        float length = chord.magnitude;
-        if (length < 0.0001f)
-            return Vector2.Lerp(start, end, t);
-
-        // The curve only offsets across the chord. Samples always progress
-        // toward the attachment, even during an abrupt change of direction.
-        Vector2 normal = new Vector2(-chord.y, chord.x) / length;
-        float offset = Mathf.Clamp(Vector2.Dot(bow, normal), -length * 0.32f, length * 0.32f);
-        return Vector2.Lerp(start, end, t) + normal * (Mathf.Sin(Mathf.PI * t) * offset);
     }
 }

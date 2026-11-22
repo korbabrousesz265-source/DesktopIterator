@@ -36,11 +36,11 @@ public class OracleUmbilicalGraphics : MonoBehaviour
     [Header("Fine cords")]
     public Color[] cordColors =
     {
-        new Color(0.46f, 0.36f, 0.28f),
-        new Color(0.30f, 0.38f, 0.40f),
-        new Color(0.41f, 0.27f, 0.25f)
+        new Color(0.54f, 0.16f, 0.20f),
+        new Color(0.19f, 0.28f, 0.55f),
+        new Color(0.24f, 0.23f, 0.25f)
     };
-    [Min(0f)] public float cordWidth = 0.015f;
+    [Min(0f)] public float cordWidth = 0.011f;
 
     [Header("Sorting orders")]
     public int trunkOrder = -17;
@@ -62,23 +62,31 @@ public class OracleUmbilicalGraphics : MonoBehaviour
     private int trunkRows;
     private Sprite bandSprite;
     private readonly List<Band> bands = new List<Band>();
-    private LineRenderer[] cords;
+    private Mesh fineCordMesh;
+    private Vector3[] fineCordVertices;
 
     private void Start()
     {
         cableMaterial = new Material(Shader.Find("Sprites/Default"));
         bandSprite = Resources.Load<Sprite>("IteratorArm/CentipedeSegment");
 
-        GameObject trunk = new GameObject("Trunk mesh");
-        trunk.transform.SetParent(transform, false);
-        trunkMesh = new Mesh { name = "Umbilical trunk" };
-        trunkMesh.MarkDynamic();
-        trunk.AddComponent<MeshFilter>().sharedMesh = trunkMesh;
-        MeshRenderer renderer = trunk.AddComponent<MeshRenderer>();
+        trunkMesh = CreateMesh("Umbilical trunk", trunkOrder);
+        fineCordMesh = CreateMesh("Fine cord ribbons", cordOrder);
+    }
+
+    private Mesh CreateMesh(string meshName, int order)
+    {
+        GameObject layer = new GameObject(meshName);
+        layer.transform.SetParent(transform, false);
+        Mesh mesh = new Mesh { name = meshName };
+        mesh.MarkDynamic();
+        layer.AddComponent<MeshFilter>().sharedMesh = mesh;
+        MeshRenderer renderer = layer.AddComponent<MeshRenderer>();
         renderer.sharedMaterial = cableMaterial;
-        renderer.sortingOrder = trunkOrder;
+        renderer.sortingOrder = order;
         renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         renderer.receiveShadows = false;
+        return mesh;
     }
 
     private void LateUpdate()
@@ -90,19 +98,77 @@ public class OracleUmbilicalGraphics : MonoBehaviour
         DrawTrunk(path);
         LayoutBands(path);
 
-        Vector2[][] paths = umbilicalPhysics.smallCordsPos;
-        if (cords == null)
+        DrawFineCords(umbilicalPhysics.smallCordsPos);
+    }
+
+    private void DrawFineCords(Vector2[][] paths)
+    {
+        int rows = 0;
+        foreach (Vector2[] path in paths)
+            rows += FineRowCount(path);
+        if (rows == 0)
+            return;
+
+        bool rebuild = fineCordVertices == null || fineCordVertices.Length != rows * 2;
+        if (rebuild)
+            fineCordVertices = new Vector3[rows * 2];
+        int vertex = 0;
+        foreach (Vector2[] path in paths)
         {
-            cords = new LineRenderer[paths.Length];
-            for (int i = 0; i < cords.Length; i++)
+            int count = FineRowCount(path);
+            Vector2 before = path[0];
+            Vector2 center = before;
+            for (int i = 0; i < count; i++)
             {
-                Color color = cordColors != null && cordColors.Length > 0
-                    ? cordColors[i % cordColors.Length] : bandLightColor;
-                cords[i] = CreateLine("Data cord " + (i + 1), cordWidth, color, cordOrder);
+                Vector2 after = i < count - 1 ? FineCenter(path, i + 1) : center;
+                Vector2 tangent = after - before;
+                Vector2 offset = new Vector2(-tangent.y, tangent.x).normalized * (cordWidth * 0.5f);
+                fineCordVertices[vertex++] = transform.InverseTransformPoint(center - offset);
+                fineCordVertices[vertex++] = transform.InverseTransformPoint(center + offset);
+                before = center;
+                center = after;
             }
         }
-        for (int i = 0; i < cords.Length; i++)
-            SetPath(cords[i], paths[i]);
+        if (rebuild)
+            fineCordMesh.Clear();
+        fineCordMesh.vertices = fineCordVertices;
+        if (rebuild)
+        {
+            var colors = new Color[rows * 2];
+            var triangles = new int[(rows - paths.Length) * 6];
+            vertex = 0;
+            int index = 0;
+            for (int i = 0; i < paths.Length; i++)
+            {
+                int count = FineRowCount(paths[i]);
+                Color color = cordColors != null && cordColors.Length > 0
+                    ? cordColors[i % cordColors.Length] : trunkColor;
+                if (QualitySettings.activeColorSpace == ColorSpace.Linear)
+                    color = color.linear;
+                for (int j = 0; j < count * 2; j++)
+                    colors[vertex + j] = color;
+                WriteRibbonTriangles(triangles, index, vertex, count - 1);
+                vertex += count * 2;
+                index += (count - 1) * 6;
+            }
+            fineCordMesh.triangles = triangles;
+            fineCordMesh.colors = colors;
+        }
+        fineCordMesh.RecalculateBounds();
+    }
+
+    private static int FineRowCount(Vector2[] path) => (path.Length - 1) * 2 + 1;
+
+    private static Vector2 FineCenter(Vector2[] path, int row)
+    {
+        int i = row / 2;
+        if (row % 2 == 0)
+            return path[i];
+        // The midpoint follows the neighbouring tangents. This smooths the visible
+        // turn without moving any of the physics points or either endpoint.
+        Vector2 before = path[Mathf.Max(0, i - 1)];
+        Vector2 after = path[Mathf.Min(path.Length - 1, i + 2)];
+        return (path[i] + path[i + 1]) * 0.5625f - (before + after) * 0.0625f;
     }
 
     private void DrawTrunk(Vector2[] path)
@@ -131,16 +197,7 @@ public class OracleUmbilicalGraphics : MonoBehaviour
         if (trunkMesh.triangles == null || trunkMesh.triangles.Length != (rows - 1) * 6)
         {
             int[] triangles = new int[(rows - 1) * 6];
-            for (int i = 0; i < rows - 1; i++)
-            {
-                int v = i * 2;
-                triangles[i * 6] = v;
-                triangles[i * 6 + 1] = v + 2;
-                triangles[i * 6 + 2] = v + 1;
-                triangles[i * 6 + 3] = v + 1;
-                triangles[i * 6 + 4] = v + 2;
-                triangles[i * 6 + 5] = v + 3;
-            }
+            WriteRibbonTriangles(triangles, 0, 0, rows - 1);
             trunkMesh.triangles = triangles;
         }
         trunkMesh.RecalculateBounds();
@@ -243,28 +300,18 @@ public class OracleUmbilicalGraphics : MonoBehaviour
         child.localScale = new Vector3(scale.x, scale.y, 1f);
     }
 
-    private LineRenderer CreateLine(string label, float width, Color color, int order)
+    private static void WriteRibbonTriangles(int[] triangles, int index, int vertex, int links)
     {
-        GameObject lineObject = new GameObject(label);
-        lineObject.transform.SetParent(transform, false);
-        LineRenderer line = lineObject.AddComponent<LineRenderer>();
-        line.sharedMaterial = cableMaterial;
-        line.useWorldSpace = true;
-        line.positionCount = 0;
-        line.widthMultiplier = width;
-        line.startColor = color;
-        line.endColor = color;
-        line.numCapVertices = 3;
-        line.numCornerVertices = 4;
-        line.sortingOrder = order;
-        return line;
-    }
-
-    private static void SetPath(LineRenderer line, Vector2[] points)
-    {
-        line.positionCount = points.Length;
-        for (int i = 0; i < points.Length; i++)
-            line.SetPosition(i, points[i]);
+        for (int i = 0; i < links; i++)
+        {
+            triangles[index++] = vertex;
+            triangles[index++] = vertex + 2;
+            triangles[index++] = vertex + 1;
+            triangles[index++] = vertex + 1;
+            triangles[index++] = vertex + 2;
+            triangles[index++] = vertex + 3;
+            vertex += 2;
+        }
     }
 
     private static Vector2 NormalAt(Vector2[] path, int i)
@@ -284,6 +331,8 @@ public class OracleUmbilicalGraphics : MonoBehaviour
     {
         if (trunkMesh != null)
             Destroy(trunkMesh);
+        if (fineCordMesh != null)
+            Destroy(fineCordMesh);
         if (cableMaterial != null)
             Destroy(cableMaterial);
     }
