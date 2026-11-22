@@ -509,6 +509,7 @@ GameObject:
   m_Component:
   - component: {fileID: 351896725}
   - component: {fileID: 351896726}
+  - component: {fileID: 351896727}
   m_Layer: 0
   m_Name: 2DCircleSpritehead
   m_TagString: Untagged
@@ -594,6 +595,25 @@ SpriteRenderer:
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
+--- !u!114 &351896727
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 351896724}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 40d0c5bb9cab4db5bd854771d7b86b6d, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::PuppetHeadGraphics
+  shellColor: {r: 1, g: 0.4, b: 0.79607844, a: 1}
+  edgeColor: {r: 0.58431375, g: 0.25490198, b: 0.42352942, a: 1}
+  hardwareColor: {r: 0.56078434, g: 0.56078434, b: 0.6, a: 1}
+  eyeColor: {r: 1, g: 0.95686275, b: 0.9137255, a: 1}
+  collarAnchor: {x: 0.08, y: 1.24}
+  neckSeat: {x: 0, y: -0.066}
+  neckWidth: 0.033
 --- !u!1 &490677114
 GameObject:
   m_ObjectHideFlags: 0
