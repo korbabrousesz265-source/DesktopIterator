@@ -27,8 +27,8 @@ public sealed class PuppetHeadGraphics : MonoBehaviour
 
     [Header("Scale")]
     [Min(1f)] public float pixelsPerUnit = 100f;
-    [Tooltip("Enlargement of the sprite layers, matching OracleArmSprites.detailScale.")]
-    [Min(0.1f)] public float detailScale = 1.35f;
+    [Tooltip("Scale multiplier relative to Rain World's source pixel dimensions.")]
+    [Min(0.1f)] public float detailScale = 1f;
     [Tooltip("GenericBodyPart head radius used by OracleGraphics (5 px).")]
     [Min(1f)] public float headRadiusPx = 5f;
 
