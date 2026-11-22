@@ -946,10 +946,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::OracleUmbilicalGraphics
   umbilicalPhysics: {fileID: 1020775470}
+  pixelsPerUnit: 100
+  detailScale: 1.35
   bandSpacingPx: 18
-  trunkBaseColor: {r: 0.047, g: 0.045, b: 0.046, a: 1}
-  trunkHighlightColor: {r: 0.32, g: 0.31, b: 0.29, a: 1}
-  trunkWidth: 0.082
+  trunkHalfWidthPx: 1.2
+  trunkColor: {r: 0.145, g: 0.142, b: 0.138, a: 1}
+  bandColor: {r: 0.24, g: 0.23, b: 0.213, a: 1}
+  bandLightColor: {r: 0.38, g: 0.37, b: 0.37, a: 1}
   cordColors:
   - {r: 0.54, g: 0.16, b: 0.20, a: 1}
   - {r: 0.19, g: 0.28, b: 0.55, a: 1}

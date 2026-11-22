@@ -26,12 +26,12 @@ public class OracleUmbilicalGraphics : MonoBehaviour
     [Min(0.1f)] public float trunkHalfWidthPx = 1.2f;
 
     [Header("Palette")]
-    [Tooltip("ArmJointGraphics.metalColor, also used for the trunk mesh.")]
+    [Tooltip("Rain World sRGB metalColor approximation, also used for the trunk mesh.")]
     public Color trunkColor = new Color(0.145f, 0.142f, 0.138f);
-    [Tooltip("Lerp(BaseColor, metalColor, 0.5)")]
+    [Tooltip("Rain World sRGB Lerp(BaseColor, metalColor, 0.5) approximation.")]
     public Color bandColor = new Color(0.240f, 0.230f, 0.213f);
-    [Tooltip("Lerp(HighLightColor, metalColor, 0.35)")]
-    public Color bandLightColor = new Color(0.312f, 0.303f, 0.283f);
+    [Tooltip("Rain World sRGB Lerp(HighLightColor, metalColor, 0.35) approximation.")]
+    public Color bandLightColor = new Color(0.38f, 0.37f, 0.37f);
 
     [Header("Fine cords")]
     public Color[] cordColors =
@@ -143,8 +143,7 @@ public class OracleUmbilicalGraphics : MonoBehaviour
                 int count = FineRowCount(paths[i]);
                 Color color = cordColors != null && cordColors.Length > 0
                     ? cordColors[i % cordColors.Length] : trunkColor;
-                if (QualitySettings.activeColorSpace == ColorSpace.Linear)
-                    color = color.linear;
+                color = ToUnityRenderColor(color);
                 for (int j = 0; j < count * 2; j++)
                     colors[vertex + j] = color;
                 WriteRibbonTriangles(triangles, index, vertex, count - 1);
@@ -179,7 +178,7 @@ public class OracleUmbilicalGraphics : MonoBehaviour
             trunkVertices = new Vector3[rows * 2];
             trunkColors = new Color[rows * 2];
             for (int i = 0; i < trunkColors.Length; i++)
-                trunkColors[i] = trunkColor;
+                trunkColors[i] = ToUnityRenderColor(trunkColor);
             trunkRows = rows;
             trunkMesh.Clear();
         }
@@ -284,6 +283,8 @@ public class OracleUmbilicalGraphics : MonoBehaviour
         created.transform.SetParent(transform, false);
         SpriteRenderer renderer = created.AddComponent<SpriteRenderer>();
         renderer.sprite = bandSprite;
+        // SpriteRenderer handles its tint in Unity's color pipeline. Keep these
+        // source sRGB tint values here; only raw mesh vertex colors need conversion.
         renderer.color = color;
         renderer.sortingOrder = order;
         renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -325,6 +326,15 @@ public class OracleUmbilicalGraphics : MonoBehaviour
     private float Pixels(float value)
     {
         return value * detailScale / Mathf.Max(1f, pixelsPerUnit);
+    }
+
+    private static Color ToUnityRenderColor(Color rainWorldSrgb)
+    {
+        // Rain World palette colors are authored in sRGB. Unity's Linear project
+        // expects mesh vertex colors and SpriteRenderer tint values in linear space.
+        return QualitySettings.activeColorSpace == ColorSpace.Linear
+            ? rainWorldSrgb.linear
+            : rainWorldSrgb;
     }
 
     private void OnDestroy()
