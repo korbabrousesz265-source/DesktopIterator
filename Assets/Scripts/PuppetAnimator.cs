@@ -42,6 +42,23 @@ public class PuppetAnimator : MonoBehaviour
     private SSOraclePetBrain attentionBrain;
     private float blinkTimer;
     private float nextBlinkTime;
+    private const float HandSimulationStep = 1f / 40f;
+    private const float HandAirFriction = 0.98f;
+    private PuppetBodyGraphics bodyGraphics;
+    private float handSimulationAccumulator;
+    private Vector2 leftHandPosition;
+    private Vector2 leftHandLastPosition;
+    private Vector2 leftHandVelocity;
+    private Vector2 rightHandPosition;
+    private Vector2 rightHandLastPosition;
+    private Vector2 rightHandVelocity;
+    private Vector2 lastBodyChunkPosition;
+    private bool handsInitialized;
+
+    public Transform HandLeft => handLeft;
+    public Transform HandRight => handRight;
+    public Transform ShoulderLeft => shoulderLeft;
+    public Transform ShoulderRight => shoulderRight;
 
     private void Start()
     {
@@ -61,7 +78,14 @@ public class PuppetAnimator : MonoBehaviour
         if (shoulderRight != null) shoulderRightStartLocalPos = shoulderRight.localPosition;
 
         attentionBrain = GetComponent<SSOraclePetBrain>();
+        bodyGraphics = GetComponentInChildren<PuppetBodyGraphics>(true);
         if (attentionBrain != null && attentionBrain.head == null) attentionBrain.head = head;
+        if (sleeveLeft != null) sleeveLeft.enabled = false;
+        if (sleeveRight != null) sleeveRight.enabled = false;
+        SetHandSortingOrder(handLeft, 1);
+        SetHandSortingOrder(handRight, 1);
+        SetHandColor(handLeft, new Color(1f, 0.4f, 203f / 255f, 1f));
+        SetHandColor(handRight, new Color(1f, 0.4f, 203f / 255f, 1f));
         ScheduleNextBlink();
     }
 
@@ -120,29 +144,125 @@ public class PuppetAnimator : MonoBehaviour
 
     private void LateUpdate()
     {
-        PoseArm(shoulderLeft, sleeveLeft, handLeft, -1f);
-        PoseArm(shoulderRight, sleeveRight, handRight, 1f);
+        SimulateHands();
     }
 
-    private void PoseArm(Transform shoulder, SpriteRenderer sleeve, Transform hand, float side)
+    public void DisableLegacySleeves()
     {
-        if (shoulder == null || sleeve == null || sleeve.sprite == null || hand == null)
+        if (sleeveLeft != null) sleeveLeft.enabled = false;
+        if (sleeveRight != null) sleeveRight.enabled = false;
+    }
+
+    private static void SetHandSortingOrder(Transform hand, int sortingOrder)
+    {
+        if (hand == null) return;
+        SpriteRenderer renderer = hand.GetComponent<SpriteRenderer>();
+        if (renderer != null) renderer.sortingOrder = sortingOrder;
+    }
+
+    private static void SetHandColor(Transform hand, Color color)
+    {
+        if (hand == null)
+            return;
+        SpriteRenderer renderer = hand.GetComponent<SpriteRenderer>();
+        if (renderer != null) renderer.color = color;
+    }
+
+    private void SimulateHands()
+    {
+        if (body == null || handLeft == null || handRight == null)
             return;
 
-        float swing = Mathf.Sin(Time.time * 1.4f + side * 0.7f) * 0.07f;
-        Vector3 direction = transform.TransformDirection(
-            new Vector3(side * 0.44f + swing, -1f, 0f).normalized);
-        Vector3 wrist = shoulder.position + direction * 0.235f;
-        hand.position = wrist;
+        if (!handsInitialized)
+            InitializeHands();
 
-        // The sleeve sprite's pivot is in a corner, so align its visible
-        // center with the arm segment after setting its rotation and scale.
-        Bounds bounds = sleeve.sprite.bounds;
-        Transform cloth = sleeve.transform;
-        cloth.rotation = Quaternion.FromToRotation(Vector3.down, direction);
-        cloth.position = Vector3.Lerp(shoulder.position, wrist, 0.46f) -
-            cloth.TransformVector(bounds.center);
+        handSimulationAccumulator = Mathf.Min(
+            handSimulationAccumulator + Mathf.Min(Time.unscaledDeltaTime, 0.05f), 0.1f);
+        while (handSimulationAccumulator >= HandSimulationStep)
+        {
+            Vector2 bodyPosition = body.position;
+            Vector2 bodyVelocity = bodyPosition - lastBodyChunkPosition;
+            GetBodyAxis(out Vector2 up, out Vector2 left);
+            SimulateHand(ref leftHandPosition, ref leftHandLastPosition,
+                ref leftHandVelocity, bodyPosition, bodyVelocity, up, left, 0);
+            SimulateHand(ref rightHandPosition, ref rightHandLastPosition,
+                ref rightHandVelocity, bodyPosition, bodyVelocity, up, left, 1);
+            lastBodyChunkPosition = bodyPosition;
+            handSimulationAccumulator -= HandSimulationStep;
+        }
+
+        float timeStacker = Mathf.Clamp01(handSimulationAccumulator / HandSimulationStep);
+        Vector2 leftPosition = Vector2.Lerp(leftHandLastPosition, leftHandPosition, timeStacker);
+        Vector2 rightPosition = Vector2.Lerp(rightHandLastPosition, rightHandPosition, timeStacker);
+        handLeft.position = new Vector3(leftPosition.x, leftPosition.y, body.position.z);
+        handRight.position = new Vector3(rightPosition.x, rightPosition.y, body.position.z);
     }
+
+    private void InitializeHands()
+    {
+        Vector2 bodyPosition = body.position;
+        // GenericBodyPart.Reset(connection.pos) starts Oracle hands within a
+        // one-pixel radial offset of body chunk 0. Their pose then comes from
+        // Update + ConnectToPoint and the source drift forces below, rather
+        // than from authored left/right shoulder offsets.
+        leftHandPosition = bodyPosition;
+        rightHandPosition = bodyPosition;
+        leftHandLastPosition = leftHandPosition;
+        rightHandLastPosition = rightHandPosition;
+        leftHandVelocity = Vector2.zero;
+        rightHandVelocity = Vector2.zero;
+        lastBodyChunkPosition = bodyPosition;
+        handsInitialized = true;
+    }
+
+    private void SimulateHand(ref Vector2 position, ref Vector2 lastPosition,
+        ref Vector2 velocity, Vector2 bodyPosition, Vector2 bodyVelocity,
+        Vector2 up, Vector2 left, int side)
+    {
+        lastPosition = position;
+        position += velocity;
+        velocity *= HandAirFriction;
+        ConnectHandToBody(ref position, ref velocity, bodyPosition, bodyVelocity,
+            Pixel(15f), 0.3f, 0.01f);
+
+        // OracleGraphics.Update: room-world gravity plus the body-axis and
+        // side-specific drift applied after GenericBodyPart.ConnectToPoint.
+        Vector2 down = -up;
+        Vector2 downPerpendicular = new Vector2(-down.y, down.x);
+        velocity.y -= Pixel(0.5f);
+        velocity += down * Pixel(0.3f);
+        velocity += downPerpendicular * Pixel(0.3f * (side == 0 ? -1f : 1f));
+    }
+
+    private static void ConnectHandToBody(ref Vector2 position, ref Vector2 velocity,
+        Vector2 bodyPosition, Vector2 bodyVelocity, float connectionRadius,
+        float adaptVelocity, float exaggerateVelocity)
+    {
+        Vector2 towardBody = bodyPosition - position;
+        float distance = towardBody.magnitude;
+        Vector2 direction = distance > 1e-6f ? towardBody / distance : Vector2.zero;
+        velocity += bodyVelocity * exaggerateVelocity;
+        if (distance >= connectionRadius)
+        {
+            Vector2 correction = direction * (connectionRadius - distance);
+            position -= correction;
+            velocity -= correction;
+        }
+        velocity -= bodyVelocity;
+        velocity *= 1f - adaptVelocity;
+        velocity += bodyVelocity;
+    }
+
+    private void GetBodyAxis(out Vector2 up, out Vector2 left)
+    {
+        up = head != null ? (Vector2)head.position - (Vector2)body.position : (Vector2)transform.up;
+        if (up.sqrMagnitude < 1e-8f)
+            up = transform.up;
+        up.Normalize();
+        left = new Vector2(-up.y, up.x);
+    }
+
+    private float Pixel(float value) => value / Mathf.Max(1f, bodyGraphics != null ? bodyGraphics.pixelsPerUnit : 100f);
 
     private Vector3 GetEyeLocalOffset(Vector3 worldDirection)
     {

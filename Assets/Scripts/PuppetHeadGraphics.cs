@@ -32,12 +32,8 @@ public sealed class PuppetHeadGraphics : MonoBehaviour
     [Tooltip("GenericBodyPart head radius used by OracleGraphics (5 px).")]
     [Min(1f)] public float headRadiusPx = 5f;
 
-    [Header("Attachment")]
-    [Tooltip("Body top in the animated torso's local space, where the neck starts.")]
-    public Vector2 collarAnchor = new Vector2(0.08f, 1.24f);
-
     [Header("Sorting orders")]
-    public int neckOrder = 0;
+    public int neckOrder = -2;
     public int chinOrder = 3;
     public int headOrder = 2;
     public int eyeOrder = 4;
@@ -126,7 +122,8 @@ public sealed class PuppetHeadGraphics : MonoBehaviour
             return;
 
         Vector3 headCenter = transform.position;
-        Vector2 bodyTop = pose.body.TransformPoint(collarAnchor);
+        // OracleGraphics draws the neck directly from body chunk 0 to the head.
+        Vector2 bodyTop = pose.body.position;
         Vector2 headToBody = bodyTop - (Vector2)headCenter;
         if (headToBody.sqrMagnitude < 1e-8f)
             headToBody = Vector2.down;
