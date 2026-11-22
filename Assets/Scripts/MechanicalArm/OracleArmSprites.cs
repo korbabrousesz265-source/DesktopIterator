@@ -34,8 +34,6 @@ public class OracleArmSprites : MonoBehaviour
     public Color plateHighlightColor = new Color(0.402f, 0.386f, 0.352f);
 
     [Header("Base plate (Rain World pixels)")]
-    [Tooltip("How far the carriage sits inside the screen edge.")]
-    [Min(0f)] public float baseInset = 6f;
     [Min(1f)] public float baseWidth = 30f;
     [Min(1f)] public float baseHeight = 17f;
     [Min(1f)] public float baseInnerWidth = 20f;
@@ -58,7 +56,6 @@ public class OracleArmSprites : MonoBehaviour
     public int basePlateOrder = -6;
     public int baseSupportOrder = -5;
     public int baseDiscOrder = -4;
-    public int tipOrder = -3;
 
     private Sprite circleSprite;
     private Sprite boltSprite;
@@ -70,11 +67,11 @@ public class OracleArmSprites : MonoBehaviour
     private SpriteRenderer[] baseSupports;
     private SpriteRenderer[] baseSupportBolts;
     private SpriteRenderer[] baseDiscs;
-    private SpriteRenderer tipDisc;
     private Mesh basePlateMesh;
     private MeshRenderer basePlateRenderer;
-    private readonly Vector3[] basePlateBuffer = new Vector3[36];
-    private readonly Color[] basePlateColors = new Color[36];
+    private const int PivotSleeveStart = 36;
+    private readonly Vector3[] basePlateBuffer = new Vector3[PivotSleeveStart + 4];
+    private readonly Color[] basePlateColors = new Color[PivotSleeveStart + 4];
 
     private bool ready;
 
@@ -112,12 +109,11 @@ public class OracleArmSprites : MonoBehaviour
                     pixelSprite, Color.Lerp(metalColor, plateColor, 0.35f), baseSupportOrder);
             baseSupportBolts[side] = CreateSprite("Base support knee " + side,
                 boltSprite, metalColor, baseSupportOrder + 1);
-            baseDiscs[side * 2] = CreateSprite("Base disc " + side, circleSprite, plateColor, baseDiscOrder);
+            baseDiscs[side * 2] = CreateSprite("Base hinge " + side, circleSprite, plateColor, baseDiscOrder);
             baseDiscs[side * 2 + 1] = CreateSprite("Base disc lip " + side,
                 circleSprite, plateHighlightColor, baseDiscOrder + 1);
         }
 
-        tipDisc = CreateSprite("Puppet socket disc", circleSprite, plateColor, tipOrder);
         ready = true;
     }
 
@@ -195,16 +191,21 @@ public class OracleArmSprites : MonoBehaviour
         }
 
         int[] pattern = { 0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 5, 4, 5, 7, 6, 5, 7, 11, 6, 7, 11, 7, 8, 11, 8, 9, 11, 9, 10 };
-        int[] triangles = new int[pattern.Length * 3];
+        int[] triangles = new int[pattern.Length * 3 + 6];
         for (int layer = 0; layer < 3; layer++)
         {
             for (int i = 0; i < pattern.Length; i++)
                 triangles[layer * pattern.Length + i] = pattern[i] + layer * 12;
         }
+        int[] sleevePattern = { 0, 1, 2, 2, 1, 3 };
+        for (int i = 0; i < sleevePattern.Length; i++)
+            triangles[pattern.Length * 3 + i] = PivotSleeveStart + sleevePattern[i];
+        for (int i = PivotSleeveStart; i < basePlateColors.Length; i++)
+            basePlateColors[i] = Color.Lerp(metalColor, plateHighlightColor, 0.42f);
 
         basePlateMesh = new Mesh { name = "Oracle arm base plate" };
         basePlateMesh.MarkDynamic();
-        basePlateMesh.vertices = new Vector3[36];
+        basePlateMesh.vertices = basePlateBuffer;
         basePlateMesh.colors = basePlateColors;
         basePlateMesh.triangles = triangles;
         filter.sharedMesh = basePlateMesh;
@@ -225,7 +226,7 @@ public class OracleArmSprites : MonoBehaviour
             CreateJointVisuals(spanCount);
 
         for (int i = 0; i < spanCount; i++)
-            LayoutJoint(i, joints, elbows, spanCount);
+            LayoutJoint(i, joints, elbows);
 
         LayoutBase(joints, elbows);
     }
@@ -236,9 +237,11 @@ public class OracleArmSprites : MonoBehaviour
         for (int i = 0; i < spanCount; i++)
         {
             JointVisuals visuals = new JointVisuals();
-            visuals.disc = CreateSprite("Joint disc " + i, circleSprite, metalColor, jointDiscOrder);
+            bool atCarriage = i == 0;
+            visuals.disc = CreateSprite(atCarriage ? "Carriage pivot" : "Joint disc " + i,
+                circleSprite, metalColor, atCarriage ? baseSupportOrder + 1 : jointDiscOrder);
             visuals.discBolt = CreateSprite("Joint bolt " + i, boltSprite,
-                Color.Lerp(metalColor, plateColor, 0.5f), jointBoltOrder);
+                Color.Lerp(metalColor, plateColor, 0.5f), atCarriage ? baseSupportOrder + 2 : jointBoltOrder);
             visuals.elbowDisc = CreateSprite("Elbow disc " + i, circleSprite, metalColor, elbowDiscOrder);
             visuals.elbowBolt = CreateSprite("Elbow bolt " + i, boltSprite,
                 Color.Lerp(metalColor, plateColor, 0.5f), elbowBoltOrder);
@@ -252,7 +255,7 @@ public class OracleArmSprites : MonoBehaviour
         }
     }
 
-    private void LayoutJoint(int index, Vector3[] joints, Vector2[] elbows, int spanCount)
+    private void LayoutJoint(int index, Vector3[] joints, Vector2[] elbows)
     {
         JointVisuals visuals = jointVisuals[index];
         Vector2 pos = joints[index];
@@ -269,12 +272,13 @@ public class OracleArmSprites : MonoBehaviour
             toElbow = Vector2.up;
         toElbow.Normalize();
 
-        // InitiateSprites: the first joint keeps its disc 12 px off the pivot,
-        // the rest sit 2 px off it. Scale is (7 - index * 0.5) / 10.
-        Vector2 discPos = pos + toElbow * Detail(index == 0 ? 12f : 2f);
-        float discScale = (7f - index * 0.5f) / 10f * detailScale;
+        // The carriage bearing is centered on the same pin as the root of the shell.
+        // Keep the last bearing compact so it reads as part of the arm near the robe.
+        float bearingScale = index == joints.Length - 2 ? detailScale * 0.72f : detailScale;
+        Vector2 discPos = pos + toElbow * Detail(index == 0 ? 0f : 2f);
+        float discScale = (7f - index * 0.5f) / 10f * bearingScale;
         PlaceSprite(visuals.disc, discPos, 0f, new Vector2(discScale, discScale));
-        PlaceSprite(visuals.discBolt, discPos, 0f, Vector2.one * detailScale);
+        PlaceSprite(visuals.discBolt, discPos, 0f, Vector2.one * bearingScale);
 
         // Second disc sits on the solved elbow, scale (6 - index * 1.5) / 10.
         float elbowScale = Mathf.Max(0.05f, (6f - index * 1.5f) / 10f * detailScale);
@@ -290,8 +294,8 @@ public class OracleArmSprites : MonoBehaviour
         visuals.lastChord = chord;
 
         float baseAngle = Aim(toElbow);
-        float cogSizeX = (5f - index * 0.5f) * detailScale;
-        float cogSizeY = (18f - index * 2f) * detailScale;
+        float cogSizeX = (5f - index * 0.5f) * bearingScale;
+        float cogSizeY = (18f - index * 2f) * bearingScale;
         for (int cog = 0; cog < 3; cog++)
         {
             PlaceSprite(visuals.cogs[cog], discPos, baseAngle + 60f * cog + visuals.cogRotation * 360f,
@@ -339,13 +343,6 @@ public class OracleArmSprites : MonoBehaviour
         PlaceSprite(visuals.rodFar, next + farDirection * (farLength * 0.5f), Aim(farDirection),
             new Vector2(rodWidth, farLength * pixelsPerUnit));
         PlaceSprite(visuals.rodTip, rodEnd, 0f, Vector2.one * detailScale);
-
-        if (index == spanCount - 1)
-        {
-            // Desktop socket pin where the last link meets the puppet cuff.
-            float tipScale = 0.42f * detailScale;
-            PlaceSprite(tipDisc, joints[index + 1], 0f, new Vector2(tipScale, tipScale));
-        }
     }
 
     private void LayoutBase(Vector3[] joints, Vector2[] elbows)
@@ -357,53 +354,53 @@ public class OracleArmSprites : MonoBehaviour
         Vector2 tangent = oracleArm.GetCarriageTangent();
         Vector2 inward = new Vector2(tangent.y, -tangent.x);
 
-        // ArmBase.DrawSprites places the plate centre behind the root joint. On the
-        // desktop the rail is the screen edge, so the plate is moved inside far
-        // enough that its back face stays visible instead of clipping away.
-        Vector2 center = root + inward * (Detail(baseHeight) * 0.8f + Detail(baseInset));
+        // Derive the bracket and both hinge feet from the arm's solved carriage pin.
+        Vector2 center = root - inward * Detail(baseHeight * 0.37f);
 
         SetBasePlateLayer(0, center, inward, tangent, baseWidth, baseHeight, baseInnerWidth);
         SetBasePlateLayer(1, center, inward, tangent, baseWidthInner, baseHeightInner, baseInnerWidthInner);
         SetBasePlateLayer(2, center, inward, tangent, baseWidth, baseHeight, baseInnerWidth);
+        Vector2 sleeveFoot = center - inward * Detail(6f);
+        Vector2 sleeveSide = tangent * Detail(4f);
+        basePlateBuffer[PivotSleeveStart] = transform.InverseTransformPoint(sleeveFoot - sleeveSide);
+        basePlateBuffer[PivotSleeveStart + 1] = transform.InverseTransformPoint(sleeveFoot + sleeveSide);
+        basePlateBuffer[PivotSleeveStart + 2] = transform.InverseTransformPoint(root - sleeveSide);
+        basePlateBuffer[PivotSleeveStart + 3] = transform.InverseTransformPoint(root + sleeveSide);
         if (basePlateMesh != null)
         {
             basePlateMesh.vertices = basePlateBuffer;
-            basePlateMesh.colors = basePlateColors;
             basePlateMesh.RecalculateBounds();
         }
 
-        Vector2 elbowAnchor = Vector2.Lerp(root, joints[1], 0.35f);
+        Vector2 shellAnchor = OracleArmGraphics.SampleRootShell(root, elbows[0], joints[1], 0.25f);
         if (debugLayout && Time.frameCount % 60 == 0)
         {
             Debug.Log("ARMDBG joints=" + string.Join(";", System.Array.ConvertAll(joints, v => v.x.ToString("F3") + "," + v.y.ToString("F3")))
-                + " root=" + root + " center=" + center + " anchor=" + elbowAnchor
+                + " root=" + root + " center=" + center + " anchor=" + shellAnchor
                 + " tangent=" + tangent + " inward=" + inward
                 + " elbow0=" + elbows[0] + " j1=" + (Vector2)joints[1]);
         }
-        // Both pistons reach the same point on the first link, like ArmBase. The
-        // desktop plate sits inside the screen edge instead of inside a wall, so the
-        // leg pair is fitted to the distance it actually has to cover.
+        // The two stays share the arm-side attachment and fold to opposite sides.
         float shortLength = Detail(supportShortLength);
-        float longLength = Detail(supportLongLength);
+        float nominalLongLength = Detail(supportLongLength);
         for (int side = 0; side < 2; side++)
         {
             float sign = side == 0 ? -1f : 1f;
             Vector2 foot = center + inward * Detail(11f) + tangent * Detail(17f * sign);
-            float span = Vector2.Distance(foot, elbowAnchor);
-            float fit = Mathf.Min(1f, span * 1.03f / Mathf.Max(0.0001f, shortLength + longLength));
-            Vector2 knee = TwoBoneJoint(foot, elbowAnchor, shortLength * fit, longLength * fit,
-                side == 0 ? 1f : -1f);
+            float span = Vector2.Distance(foot, shellAnchor);
+            // Accommodate the desktop travel range with the inner piston.
+            float longLength = Mathf.Clamp(nominalLongLength, Mathf.Abs(span - shortLength), span + shortLength);
+            Vector2 knee = TwoBoneJoint(foot, shellAnchor, shortLength, longLength, sign, tangent * sign);
 
-            PlaceBar(baseSupports[side * 2], foot, knee, Detail(3f), Detail(10f) * fit);
-            PlaceBar(baseSupports[side * 2 + 1], knee, elbowAnchor, Detail(3f), 0f);
+            PlaceBar(baseSupports[side * 2], foot, knee, Detail(3f));
+            PlaceBar(baseSupports[side * 2 + 1], knee, shellAnchor, Detail(2f));
             PlaceSprite(baseSupportBolts[side], knee, 0f, Vector2.one * detailScale);
 
-            Vector2 discPos = center + tangent * Detail(17f * sign);
             float discScale = 0.5f * detailScale;
-            PlaceSprite(baseDiscs[side * 2], discPos, 0f, new Vector2(discScale, discScale));
+            PlaceSprite(baseDiscs[side * 2], foot, 0f, Vector2.one * discScale);
             float lipScale = 0.45f * detailScale;
-            PlaceSprite(baseDiscs[side * 2 + 1], discPos + new Vector2(-Detail(1f), Detail(1f)), 0f,
-                new Vector2(lipScale, lipScale));
+            PlaceSprite(baseDiscs[side * 2 + 1], foot + new Vector2(-Detail(1f), Detail(1f)), 0f,
+                Vector2.one * lipScale);
         }
     }
 
@@ -441,7 +438,7 @@ public class OracleArmSprites : MonoBehaviour
         basePlateBuffer[start + 11] = transform.InverseTransformPoint(v11);
     }
 
-    private void PlaceBar(SpriteRenderer renderer, Vector2 start, Vector2 end, float width, float extraLength)
+    private void PlaceBar(SpriteRenderer renderer, Vector2 start, Vector2 end, float width)
     {
         Vector2 delta = end - start;
         float distance = delta.magnitude;
@@ -452,9 +449,8 @@ public class OracleArmSprites : MonoBehaviour
         }
         renderer.enabled = true;
         Vector2 direction = delta / distance;
-        float length = distance + extraLength;
-        PlaceSprite(renderer, start + direction * (length * 0.5f), Aim(direction),
-            new Vector2(width * pixelsPerUnit, length * pixelsPerUnit));
+        PlaceSprite(renderer, (start + end) * 0.5f, Aim(direction),
+            new Vector2(width * pixelsPerUnit, distance * pixelsPerUnit));
     }
 
     private void PlaceSprite(SpriteRenderer renderer, Vector2 worldPosition, float zRotationDegrees, Vector2 scale)
@@ -483,19 +479,19 @@ public class OracleArmSprites : MonoBehaviour
         return Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90f;
     }
 
-    // Two bone solve matching Custom.InverseKinematic(start, target, len1, len2, side).
-    private static Vector2 TwoBoneJoint(Vector2 start, Vector2 target, float len1, float len2, float side)
+    private static Vector2 TwoBoneJoint(Vector2 start, Vector2 target, float shortLength, float longLength,
+        float side, Vector2 foldedDirection)
     {
         Vector2 delta = target - start;
         float distance = delta.magnitude;
         if (distance < 0.0001f)
-            return start + new Vector2(0f, len1);
-        float clamped = Mathf.Clamp(distance, Mathf.Abs(len1 - len2) + 0.0001f, len1 + len2 - 0.0001f);
+            return start + foldedDirection * shortLength;
         Vector2 direction = delta / distance;
         Vector2 perpendicular = new Vector2(-direction.y, direction.x);
-        float along = (len1 * len1 - len2 * len2 + clamped * clamped) / (2f * clamped);
-        float rise = Mathf.Sqrt(Mathf.Max(0f, len1 * len1 - along * along));
-        return start + direction * along + perpendicular * (rise * Mathf.Sign(side));
+        float along = (shortLength * shortLength - longLength * longLength + distance * distance) / (2f * distance);
+        along = Mathf.Clamp(along, -shortLength, shortLength);
+        float rise = Mathf.Sqrt(Mathf.Max(0f, shortLength * shortLength - along * along));
+        return start + direction * along + perpendicular * (rise * side);
     }
 
     private void OnDestroy()

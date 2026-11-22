@@ -1,12 +1,17 @@
 using UnityEngine;
 
-// The room-frame and the joints move before their graphics and umbilical are updated.
-[DefaultExecutionOrder(-50)]
+// Read the animated torso in Update before the arm and cable render in LateUpdate.
+[DefaultExecutionOrder(10)]
 public class OracleArm : MonoBehaviour
 {
     [Header("Oracle target")]
     public Transform puppetBody;
-    public Vector2 connectionOffset = new Vector2(0.21f, -0.22f);
+    [SerializeField] private Transform backAttachment;
+    [Tooltip("World offset from the puppet root when there is no back attachment.")]
+    public Vector2 connectionOffset = new Vector2(0f, -0.17f);
+    public Vector2 AttachmentPosition => backAttachment != null
+        ? (Vector2)backAttachment.position
+        : (Vector2)puppetBody.position + connectionOffset;
 
     [Header("Rain World room frame")]
     [Tooltip("SSOracleBehavior's standard room frame, expressed in 20 px tiles.")]
@@ -14,7 +19,9 @@ public class OracleArm : MonoBehaviour
     public float roomPixelsPerUnit = 100f;
     [Tooltip("Carriage speed along the edge in world units per second.")]
     [Min(0.1f)] public float carriageSpeed = 9f;
+    [SerializeField, Min(0f)] private float carriagePivotInset = 0.27f;
     public float currentTrackPos = 2.5f;
+    public Vector2 CarriageContact => FramePosition(currentTrackPos);
 
     [Header("Extended span lengths")]
     public float[] segmentLengths = { 3f, 1.5f, 0.9f, 0.3f };
@@ -58,11 +65,11 @@ public class OracleArm : MonoBehaviour
         AllocateChain();
         RefreshRoomFrame();
 
-        currentTrackPos = ClosestTrackPosition(GetBodyTarget());
+        currentTrackPos = ClosestTrackPosition(AttachmentPosition);
         candidateTrack = currentTrackPos;
         carriageGoal = currentTrackPos;
-        Vector2 root = FramePosition(currentTrackPos);
-        Vector2 target = GetBodyTarget();
+        Vector2 root = CarriagePivot(currentTrackPos);
+        Vector2 target = AttachmentPosition;
         InitializeChain(root, target);
         SolveArm(root, target, 0f);
         initialized = true;
@@ -83,7 +90,7 @@ public class OracleArm : MonoBehaviour
             initialized = false;
         }
 
-        Vector2 target = GetBodyTarget();
+        Vector2 target = AttachmentPosition;
         if (!initialized)
         {
             currentTrackPos = ClosestTrackPosition(target);
@@ -91,20 +98,22 @@ public class OracleArm : MonoBehaviour
             carriageGoal = currentTrackPos;
             candidateAge = 0f;
             carriageMoving = false;
-            InitializeChain(FramePosition(currentTrackPos), target);
+            InitializeChain(CarriagePivot(currentTrackPos), target);
             initialized = true;
         }
 
         Vector3? drag = dragTarget;
         dragTarget = null;
-        Vector2 requestedTip = drag.HasValue ? (Vector2)drag.Value + connectionOffset : target;
+        // Preserve the current torso pose when translating the puppet to the drag target.
+        Vector2 attachmentOffset = target - (Vector2)puppetBody.position;
+        Vector2 requestedTip = drag.HasValue ? (Vector2)drag.Value + attachmentOffset : target;
         float maxReach = Mathf.Max(0.01f, TotalLength() - 0.018f);
         float minReach = Mathf.Min(maxReach, MinimumLength() + 0.005f);
         Vector2 root = MoveCarriage(requestedTip, maxReach, minReach, drag.HasValue);
         if (drag.HasValue)
         {
             target = LimitReach(root, requestedTip, minReach, maxReach);
-            Vector2 bodyPosition = target - connectionOffset;
+            Vector2 bodyPosition = target - attachmentOffset;
             puppetBody.position = new Vector3(bodyPosition.x, bodyPosition.y, drag.Value.z);
         }
         SolveArm(root, target, Time.deltaTime);
@@ -123,7 +132,7 @@ public class OracleArm : MonoBehaviour
 
     private Vector2 MoveCarriage(Vector2 target, float maxReach, float minReach, bool dragging)
     {
-        Vector2 root = FramePosition(currentTrackPos);
+        Vector2 root = CarriagePivot(currentTrackPos);
         float distance = Vector2.Distance(root, target);
         float goal = ClosestTrackPosition(target);
 
@@ -161,14 +170,14 @@ public class OracleArm : MonoBehaviour
             currentTrackPos = goal;
             carriageGoal = goal;
             carriageMoving = false;
-            return FramePosition(goal);
+            return CarriagePivot(goal);
         }
 
         if (!carriageMoving)
             return root;
 
         float nextTrack = MoveOnTrack(currentTrackPos, carriageGoal, carriageSpeed * Time.deltaTime);
-        Vector2 nextRoot = FramePosition(nextTrack);
+        Vector2 nextRoot = CarriagePivot(nextTrack);
         float nextDistance = Vector2.Distance(nextRoot, target);
         if (!dragging && (nextDistance > maxReach + 0.001f || nextDistance < minReach))
         {
@@ -207,11 +216,6 @@ public class OracleArm : MonoBehaviour
         cornerPositions[1] = roomCenter + new Vector2(38.5f, 31.5f) * tileSize;
         cornerPositions[2] = roomCenter + new Vector2(38.5f, 3.5f) * tileSize;
         cornerPositions[3] = roomCenter + new Vector2(10.5f, 3.5f) * tileSize;
-    }
-
-    private Vector2 GetBodyTarget()
-    {
-        return (Vector2)puppetBody.position + connectionOffset;
     }
 
     private void InitializeChain(Vector2 root, Vector2 target)
@@ -533,25 +537,20 @@ public class OracleArm : MonoBehaviour
         dragTarget = position;
     }
 
-    public Vector2 GetBoundaryAnchor()
-    {
-        if (mainCam == null)
-            mainCam = Camera.main;
-        if (mainCam == null || !mainCam.orthographic)
-            return cornerPositions[1];
+    public Vector2 GetCarriageTangent() => CarriageTangent(currentTrackPos);
 
-        Vector2 center = mainCam.transform.position;
-        float halfWidth = mainCam.orthographicSize * mainCam.aspect;
-        float halfHeight = mainCam.orthographicSize;
-        return center + new Vector2(halfWidth * 0.94f, halfHeight);
+    private Vector2 CarriagePivot(float track)
+    {
+        Vector2 tangent = CarriageTangent(track);
+        Vector2 inward = new Vector2(tangent.y, -tangent.x);
+        return FramePosition(track) + inward * carriagePivotInset;
     }
 
-    public Vector2 GetCarriageTangent()
+    private Vector2 CarriageTangent(float track)
     {
-        // The attachment stays on the screen edge. Only the carriage face
-        // blends its angle across the last part of the two adjacent edges.
+        // Blend the carriage orientation while its rail contact follows the corner.
         const float blendDistance = 0.42f;
-        float distance = DistanceOnTrack(currentTrackPos);
+        float distance = DistanceOnTrack(track);
         Vector2 before = FramePosition(TrackAtDistance(distance - blendDistance));
         Vector2 after = FramePosition(TrackAtDistance(distance + blendDistance));
         return (after - before).normalized;

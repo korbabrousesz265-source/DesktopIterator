@@ -26,7 +26,8 @@ public static class IteratorArmSpriteExporter
         ("Circle20", "Circle20"),
         ("deerEyeB", "deerEyeB"),
         ("MirosLegSmallPart", "MirosLegSmallPart"),
-        ("pixel", "pixel")
+        ("pixel", "pixel"),
+        ("CentipedeSegment", "CentipedeSegment")
     };
 
     [MenuItem("Tools/Iterator Arm/Export Joint And Base Sprites")]

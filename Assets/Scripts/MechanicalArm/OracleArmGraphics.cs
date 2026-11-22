@@ -66,8 +66,6 @@ public class OracleArmGraphics : MonoBehaviour
             else
                 DrawShortShell(joints[i], elbows[i], joints[i + 1], thickness);
         }
-        DrawTipCuff(joints[links]);
-
         armMesh.Clear();
         armMesh.SetVertices(vertices);
         armMesh.SetColors(colors);
@@ -84,20 +82,29 @@ public class OracleArmGraphics : MonoBehaviour
         if (firstLength < 0.0001f || secondLength < 0.0001f)
             return;
 
-        Vector2 incoming = first / firstLength;
-        Vector2 outgoing = second / secondLength;
-        Vector2 middleTangent = (incoming + outgoing).normalized;
-        if (middleTangent == Vector2.zero)
-            middleTangent = new Vector2(-incoming.y, incoming.x);
-
-        // Matching handles produce a shared tangent at the solved elbow.
-        // This is the exterior shell. All three rig anchors retain their pose.
-        Vector2 middleHandle = middleTangent * (Mathf.Min(firstLength, secondLength) * 0.38f);
+        Vector2 middleHandle = RootMiddleHandle(first, second);
         float seam = firstLength / (firstLength + secondLength);
         DrawCubicShell(start, start + first * 0.28f, elbow - middleHandle, elbow,
             0f, seam, width, 22, true);
         DrawCubicShell(elbow, elbow + middleHandle, end - second * 0.28f, end,
             seam, 1f, width, 14, false);
+    }
+
+    internal static Vector2 SampleRootShell(Vector2 start, Vector2 elbow, Vector2 end, float t)
+    {
+        Vector2 first = elbow - start;
+        return CubicPoint(start, start + first * 0.28f, elbow - RootMiddleHandle(first, end - elbow),
+            elbow, t, out _);
+    }
+
+    private static Vector2 RootMiddleHandle(Vector2 first, Vector2 second)
+    {
+        // The two curves share a tangent at the solved elbow.
+        Vector2 incoming = first.normalized;
+        Vector2 middleTangent = (incoming + second.normalized).normalized;
+        if (middleTangent == Vector2.zero)
+            middleTangent = new Vector2(-incoming.y, incoming.x);
+        return middleTangent * (Mathf.Min(first.magnitude, second.magnitude) * 0.38f);
     }
 
     private void DrawCubicShell(Vector2 a, Vector2 b, Vector2 c, Vector2 d,
@@ -106,14 +113,21 @@ public class OracleArmGraphics : MonoBehaviour
         for (int i = startNew ? 0 : 1; i <= samples; i++)
         {
             float t = i / (float)samples;
-            Vector2 ab = Vector2.Lerp(a, b, t);
-            Vector2 bc = Vector2.Lerp(b, c, t);
-            Vector2 cd = Vector2.Lerp(c, d, t);
-            Vector2 left = Vector2.Lerp(ab, bc, t);
-            Vector2 right = Vector2.Lerp(bc, cd, t);
-            Vector2 center = Vector2.Lerp(left, right, t);
-            AddShellRow(center, right - left, width, Mathf.Lerp(from, to, t), i != 0);
+            Vector2 center = CubicPoint(a, b, c, d, t, out Vector2 tangent);
+            AddShellRow(center, tangent, width, Mathf.Lerp(from, to, t), i != 0);
         }
+    }
+
+    private static Vector2 CubicPoint(Vector2 a, Vector2 b, Vector2 c, Vector2 d, float t,
+        out Vector2 tangent)
+    {
+        Vector2 ab = Vector2.Lerp(a, b, t);
+        Vector2 bc = Vector2.Lerp(b, c, t);
+        Vector2 cd = Vector2.Lerp(c, d, t);
+        Vector2 left = Vector2.Lerp(ab, bc, t);
+        Vector2 right = Vector2.Lerp(bc, cd, t);
+        tangent = right - left;
+        return Vector2.Lerp(left, right, t);
     }
 
     private void DrawShortShell(Vector2 start, Vector2 elbow, Vector2 end, float width)
@@ -180,37 +194,6 @@ public class OracleArmGraphics : MonoBehaviour
             Triangle(i - bands, i - bands + 1, i);
             Triangle(i, i - bands + 1, i + 1);
         }
-    }
-
-    private void DrawTipCuff(Vector2 tip)
-    {
-        // The cuff keeps the robe edge closed where the last link meets the
-        // puppet. The socket disc on top of it is a sprite in OracleArmSprites.
-        Quad(tip + Vector2.left * 0.027f, Vector2.right, Vector2.up, 0.168f, 0.118f, shadowColor);
-        Quad(tip + Vector2.left * 0.034f, Vector2.right, Vector2.up, 0.126f, 0.079f, baseMetalColor);
-    }
-
-    private void Bar(Vector2 start, Vector2 end, float width, Color color)
-    {
-        Vector2 delta = end - start;
-        float length = delta.magnitude;
-        if (length < 0.0001f)
-            return;
-        Vector2 axis = delta / length;
-        Quad((start + end) * 0.5f, axis, new Vector2(-axis.y, axis.x), length, width, color);
-    }
-
-    private void Quad(Vector2 center, Vector2 axis, Vector2 side, float length, float width, Color color)
-    {
-        int first = vertices.Count;
-        Vector2 x = axis * (length * 0.5f);
-        Vector2 y = side * (width * 0.5f);
-        Vertex(center - x - y, color);
-        Vertex(center - x + y, color);
-        Vertex(center + x - y, color);
-        Vertex(center + x + y, color);
-        Triangle(first, first + 1, first + 2);
-        Triangle(first + 2, first + 1, first + 3);
     }
 
     private void Vertex(Vector2 point, Color color)

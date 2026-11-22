@@ -58,3 +58,21 @@ REA Evidence used:
 - The desktop guide shoes, bearing rims and sleeves were removed; the carriage is now the
   `ArmBase` bracket plus its two `pixel` piston supports and `Circle20` side discs.
 
+## Puppet-side attachment
+
+- In the supplied footage, the short terminal span disappears under the torso when entering from the side at `00:12.12` and from below at `00:50.16`. The inside of the attachment is occluded. In the inspected build, `ArmJointGraphics.DrawSprites` interpolates `bodyChunks[1]` as the final endpoint. `OracleGraphics` allocates the arm sprite range before the body and robe and adds those sprites in order to the midground. REA managed evidence: `ev_b2c62321a0675733e1c04e0de98215f90967a6717181ed20d54ad0fc115bba68`.
+- In Unity, `ArmBackAttachment` is a child of the animated torso at the lower back. Both drag reach and the arm solve use that point. The last span draws behind the robe, which hides the actual endpoint. The former side cuff and extra tip disc were removed.
+
+## Carriage pivot and support hinges
+
+- In the supplied Look to the Moon footage (game version unverified), the plate and root of the first span meet at the lower edge at `00:50.16`. At `02:30.20` the narrow supports can be seen beside the root. Their individual pins are partly obscured.
+- `OracleGraphics.ArmBase.DrawSprites` computes the plate origin from the root joint and the rail normal. It places the feet on either side, targets a point one quarter of the way toward the first elbow, and solves the two knees on opposite sides. REA managed evidence: `ev_65b90c859ea28b1d443d69010fda063da7534d0b36229dc17a14104794d6c60c`.
+- Unity keeps the rail contact at the viewport edge and places the pivot inside the plate. The arm mesh begins at that pin and both hinge feet sit on the plate. Their shared target follows the first cubic shell. Each hinge keeps a constant outer link length and adjusts its thinner inner link only when the desktop pose falls outside the nominal travel.
+
+## Main umbilical cable
+
+- In the supplied Looks to the Moon room footage, the dark banded cable rises from near the middle of the floor at `00:22.00`, `00:34.00`, and `00:42.00`. Its exit stays fixed while the carriage moves between walls. The large return curves change sides and occasionally cross in projection. The last join is partly hidden by the arm and head effects. The footage's exact game build is unverified.
+- In the installed managed artifact, `OracleGraphics.UbilicalCord` has 80 main samples with 10 px between neighbours, for 790 px of nominal length. `Update` integrates velocity with damping, subtracts room gravity, and applies a slight upward bias strongest near the floor. `SetStuckSegments` pins sample zero to a tile (default `24,2`, separate branches in `RM` and `CL`). Around sample 60, it guides the cable off the span from arm joint 1 to its elbow. The last main sample is kept within reach of the first body chunk. The fine cords bridge from the last main sample to the head.
+- `InitiateSprites` creates a long mesh for the core and two differently scaled `CentipedeSegment` sprites per main sample. `DrawSprites` orients them across the local cable direction. `ApplyPalette` colors the core with the arm metal and tints the two overlays separately. REA managed evidence `ev_5a5209396684a8cbec94fc4dc1860a0c23c66b608148fd57a118a43dc17928e2`.
+- The desktop exit sits at 52% of the viewport width along the floor. The trunk has a short upright outlet, a mechanical guide, and a movable receiver beside the head. The viewport determines the resting length once so the cable supplies the full arm travel. Fixed-step integration and bend constraints carry the slack through large folds. The jacket and repeated collars use an original vertex-colored mesh.
+

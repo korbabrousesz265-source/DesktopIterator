@@ -31,6 +31,10 @@ public class PreviewCapture : MonoBehaviour
                 fileName = arguments[i + 1];
             else if (arguments[i] == "-previewPuppet")
                 puppetPosition = ParseVector(arguments[i + 1]);
+            else if (arguments[i] == "-previewDelay" &&
+                     float.TryParse(arguments[i + 1], NumberStyles.Float, CultureInfo.InvariantCulture,
+                         out float delay))
+                captureDelay = Mathf.Max(0.1f, delay);
         }
 
         if (string.IsNullOrEmpty(outputDirectory))
