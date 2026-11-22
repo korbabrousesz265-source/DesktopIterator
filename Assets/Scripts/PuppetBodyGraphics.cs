@@ -9,6 +9,8 @@ public sealed class PuppetBodyGraphics : MonoBehaviour
     [Header("Rain World simulation scale")]
     [Min(1f)] public float pixelsPerUnit = 100f;
     [Min(0f)] public float roomGravity = 0f;
+    [Tooltip("Desktop display correction for the gown silhouette. The cloth simulation remains in Rain World source units.")]
+    [Min(0.1f)] public float gownVisualScale = 1.2f;
 
     [Header("Sorting")]
     public int armSortingOrder = 0;
@@ -210,11 +212,13 @@ public sealed class PuppetBodyGraphics : MonoBehaviour
     {
         int index = 0;
         float timeStacker = Mathf.Clamp01(simulationAccumulator / SimulationStep);
+        Vector2 bodyPosition = pose.body.position;
         for (int cross = 0; cross < GownDivisions; cross++)
         for (int length = 0; length < GownDivisions; length++)
         {
             Vector2 point = Vector2.Lerp(robeLastPosition[cross, length],
                 robePosition[cross, length], timeStacker);
+            point = bodyPosition + (point - bodyPosition) * gownVisualScale;
             robeVertices[index++] = ToRootLocal(point);
         }
 
