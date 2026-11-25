@@ -47,7 +47,13 @@ Atlas rects (TexturePacker coordinates, top-left origin) of the elements the arm
   `MirosLegSmallPart` hanging from the elbow back to the 20 % chord point, one `pixel` rod
   from the elbow towards the 80 % chord point with `scaleY = totalLength / 4`, a second rod
   from the next joint towards that rod end with `scaleY = distance + 10`, and a `deerEyeB`
-  at the rod end.
+  at the rod end. The shaft is code-generated as two `TriangleMesh.MakeLongMesh` pieces per
+  span, sampled on the two Bezier curves around the solved elbow. `num5` defines the casing
+  profile; in the last quarter of the incoming curve and first quarter of the outgoing curve,
+  it is halved, and `num6 = num5 * num3 * sign` shifts only the sampled cross-section along
+  the local normal. `num3` steps down by joint index and `sign` alternates, yielding short,
+  narrowed shoulders around the pin. Independent `SegmentSprite(k, 0/1)` meshes form the
+  casing and its narrower highlight strip.
 - `Update` turns the cogs by the change of the chord length:
   `delta = (lastChord - chord) / totalLength`, `cogRotat += delta * (±1) * 2`, sign by
   joint parity.
@@ -78,21 +84,26 @@ Atlas rects (TexturePacker coordinates, top-left origin) of the elements the arm
   `SpriteRenderer` per element and lays them out with the numbers above, converting Futile
   pixels with `pixelsPerUnit = 100`. It is added automatically by `OracleArmGraphics.Awake`,
   so the scene needs no new component.
+- `OracleArmGraphics` draws the casing and its narrow highlight as separate dynamic meshes.
+  Each span follows its two tangent-matched curves. The elbow's round pin is rendered above
+  both shell meshes; the shell ends leave it visible. Only the local cross-section is narrowed
+  and offset in elbow-adjacent samples, with alternating offset direction.
 - `Assets/Scripts/MechanicalArm/OracleArmGraphics.cs` keeps only the code-drawn shells and the
   puppet cuff; the previous procedural mount, bearings, bearing lips and sleeves were removed
   because those parts are the sprite layers now.
-- Sorting orders: rods `-14`, cogs `-13`, elbow discs `-12`, elbow bolts `-11`, shell mesh
-  `-10`, pivot discs `-8`, pivot bolts `-7`, carriage plate `-6`, supports `-5`, base discs
+- Sorting orders: rods `-14`, cogs `-13`, shell mesh `-10`, shell highlight `-9`, elbow discs
+  `-8`, elbow bolts `-7`, pivot discs `-8`, pivot bolts `-7`, carriage plate `-6`, supports
+  `-5`, base discs
   `-4`, puppet socket `-3`. Everything stays under the robe (`-1`) and above the umbilical
   (`-16 … -14`).
 
 ## Deliberate differences from the game
 
-The desktop shell is roughly three times thicker than the original 12 px band, so three
-adaptations keep the original proportions instead of the original absolute sizes:
+The desktop uses a 12 px root shell width. Three adaptations keep the joint and base details
+readable at the desktop scale:
 
 1. `detailScale` (default `1.35`) enlarges the discs, bolts, cogs, struts, carriage plate and
-   supports together with the shell.
+   supports to account for the desktop display scale.
 2. The carriage plate sits *inside* the screen edge (`baseInset`, `baseHeight * 0.8`) instead
    of behind a room wall, otherwise the whole bracket would be clipped away. The piston pair
    is fitted to the distance it has to cover (`span * 1.03`), so the legs do not cross.
@@ -105,6 +116,11 @@ sorting order and the three palette colours are exposed in the Inspector.
 
 ## Verification
 
+- `Logs/arm-joint-local-build.log`: Unity `6000.4.8f1` player build, `Build Finished, Result:
+  Success`, no compiler errors. `Logs/arm-joint-local-preview.log` and
+  `Builds/LatestArmCapture/arm-joint-local-pass/capture.png` record the transparent-window
+  capture at the pinned pose `-4,0.7`; the elbow pins render above the separate casing and
+  highlight meshes.
 - `Logs/arm-sprite-export.log`: the four elements were cropped (`20x20`, `5x5`, `4x25`,
   `1x1`).
 - `Logs/arm-sprite-build.log`: Unity `6000.4.8f1` player build, `Build Finished, Result:

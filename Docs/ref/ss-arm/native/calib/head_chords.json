@@ -1,0 +1,1552 @@
+[
+ {
+  "sec": 0,
+  "file": "t000.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 1,
+  "file": "t001.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 2,
+  "file": "t002.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1004,
+   554,
+   1023,
+   573
+  ],
+  "chord": [
+   null,
+   38.152,
+   18.36,
+   36.613
+  ]
+ },
+ {
+  "sec": 3,
+  "file": "t003.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   966,
+   594,
+   995,
+   614
+  ],
+  "chord": [
+   15.57,
+   null,
+   null,
+   null
+  ]
+ },
+ {
+  "sec": 4,
+  "file": "t004.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   910,
+   604,
+   937,
+   629
+  ],
+  "chord": [
+   16.858,
+   null,
+   13.264,
+   31.126
+  ]
+ },
+ {
+  "sec": 5,
+  "file": "t005.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 6,
+  "file": "t006.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 7,
+  "file": "t007.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   858,
+   468,
+   886,
+   489
+  ],
+  "chord": [
+   null,
+   null,
+   17.795,
+   null
+  ]
+ },
+ {
+  "sec": 8,
+  "file": "t008.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 9,
+  "file": "t009.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   972,
+   456,
+   991,
+   474
+  ],
+  "chord": [
+   20.872,
+   40.328,
+   null,
+   null
+  ]
+ },
+ {
+  "sec": 10,
+  "file": "t010.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 11,
+  "file": "t011.png",
+  "ok": true,
+  "w": 309.17,
+  "h": -8.83,
+  "aspect": -35.0,
+  "xc": 1128,
+  "yc": 507,
+  "blob": [
+   1098,
+   484,
+   1159,
+   531
+  ],
+  "area": 260
+ },
+ {
+  "sec": 12,
+  "file": "t012.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   966,
+   596,
+   995,
+   615
+  ],
+  "chord": [
+   15.571,
+   45.069,
+   18.294,
+   null
+  ]
+ },
+ {
+  "sec": 13,
+  "file": "t013.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1274,
+   701,
+   1301,
+   719
+  ],
+  "chord": [
+   18.486,
+   null,
+   null,
+   35.139
+  ]
+ },
+ {
+  "sec": 14,
+  "file": "t014.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 15,
+  "file": "t015.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1482,
+   336,
+   1517,
+   365
+  ],
+  "chord": [
+   null,
+   null,
+   11.894,
+   null
+  ]
+ },
+ {
+  "sec": 16,
+  "file": "t016.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 17,
+  "file": "t017.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1664,
+   846,
+   1683,
+   863
+  ],
+  "chord": [
+   20.728,
+   38.72,
+   null,
+   35.577
+  ]
+ },
+ {
+  "sec": 18,
+  "file": "t018.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1740,
+   864,
+   1761,
+   882
+  ],
+  "chord": [
+   21.972,
+   41.542,
+   16.865,
+   null
+  ]
+ },
+ {
+  "sec": 19,
+  "file": "t019.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 20,
+  "file": "t020.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 21,
+  "file": "t021.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 22,
+  "file": "t022.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1616,
+   458,
+   1635,
+   475
+  ],
+  "chord": [
+   20.848,
+   null,
+   null,
+   null
+  ]
+ },
+ {
+  "sec": 23,
+  "file": "t023.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1180,
+   752,
+   1199,
+   771
+  ],
+  "chord": [
+   20.47,
+   40.042,
+   16.331,
+   null
+  ]
+ },
+ {
+  "sec": 24,
+  "file": "t024.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   770,
+   830,
+   799,
+   851
+  ],
+  "chord": [
+   null,
+   35.103,
+   15.646,
+   35.202
+  ]
+ },
+ {
+  "sec": 25,
+  "file": "t025.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 26,
+  "file": "t026.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   776,
+   724,
+   803,
+   742
+  ],
+  "chord": [
+   16.687,
+   null,
+   18.465,
+   null
+  ]
+ },
+ {
+  "sec": 27,
+  "file": "t027.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 28,
+  "file": "t028.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 29,
+  "file": "t029.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 30,
+  "file": "t030.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 31,
+  "file": "t031.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1422,
+   1048,
+   1451,
+   1069
+  ],
+  "chord": [
+   -314.999,
+   25.0,
+   null,
+   24.81
+  ]
+ },
+ {
+  "sec": 32,
+  "file": "t032.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 33,
+  "file": "t033.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 34,
+  "file": "t034.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1684,
+   886,
+   1713,
+   907
+  ],
+  "chord": [
+   15.917,
+   null,
+   17.579,
+   35.374
+  ]
+ },
+ {
+  "sec": 35,
+  "file": "t035.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1738,
+   856,
+   1765,
+   877
+  ],
+  "chord": [
+   22.465,
+   44.334,
+   19.4,
+   null
+  ]
+ },
+ {
+  "sec": 36,
+  "file": "t036.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1778,
+   872,
+   1799,
+   890
+  ],
+  "chord": [
+   19.621,
+   null,
+   18.368,
+   null
+  ]
+ },
+ {
+  "sec": 37,
+  "file": "t037.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 38,
+  "file": "t038.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1757,
+   834,
+   1787,
+   861
+  ],
+  "chord": [
+   15.566,
+   45.18,
+   16.553,
+   null
+  ]
+ },
+ {
+  "sec": 39,
+  "file": "t039.png",
+  "ok": true,
+  "w": 19.97,
+  "h": 19.29,
+  "aspect": 1.035,
+  "xc": 1752,
+  "yc": 1023,
+  "blob": [
+   1742,
+   1014,
+   1763,
+   1033
+  ],
+  "area": 317
+ },
+ {
+  "sec": 40,
+  "file": "t040.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1676,
+   1014,
+   1705,
+   1036
+  ],
+  "chord": [
+   15.785,
+   null,
+   14.379,
+   null
+  ]
+ },
+ {
+  "sec": 41,
+  "file": "t041.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 42,
+  "file": "t042.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 43,
+  "file": "t043.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1628,
+   877,
+   1657,
+   897
+  ],
+  "chord": [
+   null,
+   45.251,
+   null,
+   34.072
+  ]
+ },
+ {
+  "sec": 44,
+  "file": "t044.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1684,
+   850,
+   1719,
+   881
+  ],
+  "chord": [
+   16.441,
+   null,
+   12.828,
+   30.719
+  ]
+ },
+ {
+  "sec": 45,
+  "file": "t045.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 46,
+  "file": "t046.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 47,
+  "file": "t047.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1757,
+   964,
+   1775,
+   981
+  ],
+  "chord": [
+   null,
+   39.534,
+   17.569,
+   null
+  ]
+ },
+ {
+  "sec": 48,
+  "file": "t048.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1734,
+   1004,
+   1763,
+   1023
+  ],
+  "chord": [
+   null,
+   45.066,
+   18.72,
+   36.467
+  ]
+ },
+ {
+  "sec": 49,
+  "file": "t049.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 50,
+  "file": "t050.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 51,
+  "file": "t051.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 52,
+  "file": "t052.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 53,
+  "file": "t053.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 54,
+  "file": "t054.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 55,
+  "file": "t055.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 56,
+  "file": "t056.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1246,
+   350,
+   1265,
+   369
+  ],
+  "chord": [
+   20.713,
+   null,
+   16.799,
+   36.02
+  ]
+ },
+ {
+  "sec": 57,
+  "file": "t057.png",
+  "ok": true,
+  "w": 19.86,
+  "h": 19.46,
+  "aspect": 1.021,
+  "xc": 1603,
+  "yc": 749,
+  "blob": [
+   1594,
+   740,
+   1613,
+   759
+  ],
+  "area": 317
+ },
+ {
+  "sec": 58,
+  "file": "t058.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 59,
+  "file": "t059.png",
+  "ok": true,
+  "w": 18.17,
+  "h": 21.31,
+  "aspect": 0.853,
+  "xc": 1661,
+  "yc": 898,
+  "blob": [
+   1650,
+   888,
+   1673,
+   909
+  ],
+  "area": 364
+ },
+ {
+  "sec": 60,
+  "file": "t060.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1476,
+   816,
+   1505,
+   843
+  ],
+  "chord": [
+   15.415,
+   35.42,
+   null,
+   null
+  ]
+ },
+ {
+  "sec": 61,
+  "file": "t061.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1552,
+   650,
+   1579,
+   673
+  ],
+  "chord": [
+   26.447,
+   null,
+   18.336,
+   34.425
+  ]
+ },
+ {
+  "sec": 62,
+  "file": "t062.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1670,
+   733,
+   1697,
+   751
+  ],
+  "chord": [
+   16.55,
+   null,
+   null,
+   null
+  ]
+ },
+ {
+  "sec": 63,
+  "file": "t063.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1582,
+   692,
+   1609,
+   713
+  ],
+  "chord": [
+   16.867,
+   40.306,
+   null,
+   null
+  ]
+ },
+ {
+  "sec": 64,
+  "file": "t064.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 65,
+  "file": "t065.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1042,
+   584,
+   1069,
+   607
+  ],
+  "chord": [
+   null,
+   44.439,
+   null,
+   null
+  ]
+ },
+ {
+  "sec": 66,
+  "file": "t066.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 67,
+  "file": "t067.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   894,
+   756,
+   923,
+   777
+  ],
+  "chord": [
+   null,
+   45.342,
+   null,
+   null
+  ]
+ },
+ {
+  "sec": 68,
+  "file": "t068.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 69,
+  "file": "t069.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 70,
+  "file": "t070.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   804,
+   375,
+   831,
+   401
+  ],
+  "chord": [
+   null,
+   44.698,
+   null,
+   37.254
+  ]
+ },
+ {
+  "sec": 71,
+  "file": "t071.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   896,
+   212,
+   923,
+   232
+  ],
+  "chord": [
+   16.686,
+   44.701,
+   17.462,
+   null
+  ]
+ },
+ {
+  "sec": 72,
+  "file": "t072.png",
+  "ok": true,
+  "w": 21.75,
+  "h": 20.05,
+  "aspect": 1.085,
+  "xc": 983,
+  "yc": 232,
+  "blob": [
+   972,
+   222,
+   995,
+   243
+  ],
+  "area": 361
+ },
+ {
+  "sec": 73,
+  "file": "t073.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 74,
+  "file": "t074.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 75,
+  "file": "t075.png",
+  "ok": true,
+  "w": 29.5,
+  "h": 17.67,
+  "aspect": 1.67,
+  "xc": 978,
+  "yc": 305,
+  "blob": [
+   964,
+   296,
+   993,
+   315
+  ],
+  "area": 411
+ },
+ {
+  "sec": 76,
+  "file": "t076.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1172,
+   428,
+   1197,
+   449
+  ],
+  "chord": [
+   21.73,
+   null,
+   null,
+   null
+  ]
+ },
+ {
+  "sec": 77,
+  "file": "t077.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1557,
+   874,
+   1577,
+   891
+  ],
+  "chord": [
+   20.684,
+   null,
+   17.573,
+   null
+  ]
+ },
+ {
+  "sec": 78,
+  "file": "t078.png",
+  "ok": true,
+  "w": 29.94,
+  "h": 17.63,
+  "aspect": 1.698,
+  "xc": 1684,
+  "yc": 954,
+  "blob": [
+   1670,
+   944,
+   1699,
+   965
+  ],
+  "area": 397
+ },
+ {
+  "sec": 79,
+  "file": "t079.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 80,
+  "file": "t080.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 81,
+  "file": "t081.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1502,
+   281,
+   1529,
+   307
+  ],
+  "chord": [
+   16.535,
+   null,
+   null,
+   33.65
+  ]
+ },
+ {
+  "sec": 82,
+  "file": "t082.png",
+  "ok": true,
+  "w": 20.1,
+  "h": 17.35,
+  "aspect": 1.158,
+  "xc": 1656,
+  "yc": 210,
+  "blob": [
+   1640,
+   194,
+   1673,
+   227
+  ],
+  "area": 466
+ },
+ {
+  "sec": 83,
+  "file": "t083.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 84,
+  "file": "t084.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1534,
+   432,
+   1561,
+   453
+  ],
+  "chord": [
+   16.497,
+   null,
+   null,
+   35.537
+  ]
+ },
+ {
+  "sec": 85,
+  "file": "t085.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 86,
+  "file": "t086.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1326,
+   412,
+   1355,
+   434
+  ],
+  "chord": [
+   17.496,
+   null,
+   18.422,
+   36.392
+  ]
+ },
+ {
+  "sec": 87,
+  "file": "t087.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   988,
+   692,
+   1033,
+   727
+  ],
+  "chord": [
+   23.826,
+   null,
+   18.75,
+   28.188
+  ]
+ },
+ {
+  "sec": 88,
+  "file": "t088.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   740,
+   764,
+   771,
+   787
+  ],
+  "chord": [
+   14.719,
+   34.279,
+   null,
+   34.349
+  ]
+ },
+ {
+  "sec": 89,
+  "file": "t089.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 90,
+  "file": "t090.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   808,
+   730,
+   837,
+   751
+  ],
+  "chord": [
+   null,
+   null,
+   null,
+   37.258
+  ]
+ },
+ {
+  "sec": 91,
+  "file": "t091.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 92,
+  "file": "t092.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 93,
+  "file": "t093.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   800,
+   880,
+   827,
+   899
+  ],
+  "chord": [
+   null,
+   44.472,
+   null,
+   36.576
+  ]
+ },
+ {
+  "sec": 94,
+  "file": "t094.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   748,
+   886,
+   779,
+   911
+  ],
+  "chord": [
+   null,
+   null,
+   13.598,
+   33.265
+  ]
+ },
+ {
+  "sec": 95,
+  "file": "t095.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 96,
+  "file": "t096.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1030,
+   944,
+   1057,
+   963
+  ],
+  "chord": [
+   null,
+   null,
+   null,
+   null
+  ]
+ },
+ {
+  "sec": 97,
+  "file": "t097.png",
+  "ok": true,
+  "w": 19.82,
+  "h": 19.51,
+  "aspect": 1.016,
+  "xc": 1393,
+  "yc": 689,
+  "blob": [
+   1380,
+   677,
+   1407,
+   701
+  ],
+  "area": 399
+ },
+ {
+  "sec": 98,
+  "file": "t098.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1710,
+   402,
+   1739,
+   423
+  ],
+  "chord": [
+   null,
+   45.152,
+   17.848,
+   null
+  ]
+ },
+ {
+  "sec": 99,
+  "file": "t099.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 100,
+  "file": "t100.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 101,
+  "file": "t101.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 102,
+  "file": "t102.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1758,
+   440,
+   1787,
+   467
+  ],
+  "chord": [
+   null,
+   null,
+   null,
+   40.448
+  ]
+ },
+ {
+  "sec": 103,
+  "file": "t103.png",
+  "ok": true,
+  "w": 19.74,
+  "h": 17.82,
+  "aspect": 1.108,
+  "xc": 1581,
+  "yc": 501,
+  "blob": [
+   1568,
+   492,
+   1595,
+   511
+  ],
+  "area": 377
+ },
+ {
+  "sec": 104,
+  "file": "t104.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 105,
+  "file": "t105.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1570,
+   266,
+   1589,
+   285
+  ],
+  "chord": [
+   null,
+   40.24,
+   16.43,
+   36.356
+  ]
+ },
+ {
+  "sec": 106,
+  "file": "t106.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 107,
+  "file": "t107.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 108,
+  "file": "t108.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1678,
+   212,
+   1703,
+   235
+  ],
+  "chord": [
+   17.465,
+   43.446,
+   null,
+   null
+  ]
+ },
+ {
+  "sec": 109,
+  "file": "t109.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 110,
+  "file": "t110.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 111,
+  "file": "t111.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1462,
+   910,
+   1491,
+   931
+  ],
+  "chord": [
+   null,
+   null,
+   null,
+   35.147
+  ]
+ },
+ {
+  "sec": 112,
+  "file": "t112.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   988,
+   794,
+   1017,
+   817
+  ],
+  "chord": [
+   null,
+   null,
+   null,
+   34.059
+  ]
+ },
+ {
+  "sec": 113,
+  "file": "t113.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 114,
+  "file": "t114.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 115,
+  "file": "t115.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 116,
+  "file": "t116.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1044,
+   630,
+   1066,
+   649
+  ],
+  "chord": [
+   20.947,
+   null,
+   16.457,
+   null
+  ]
+ },
+ {
+  "sec": 117,
+  "file": "t117.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 118,
+  "file": "t118.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1712,
+   662,
+   1741,
+   681
+  ],
+  "chord": [
+   15.983,
+   null,
+   16.967,
+   34.138
+  ]
+ },
+ {
+  "sec": 119,
+  "file": "t119.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 120,
+  "file": "t120.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1758,
+   1018,
+   1785,
+   1043
+  ],
+  "chord": [
+   null,
+   36.34,
+   21.529,
+   39.695
+  ]
+ },
+ {
+  "sec": 121,
+  "file": "t121.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 122,
+  "file": "t122.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 123,
+  "file": "t123.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1562,
+   274,
+   1589,
+   299
+  ],
+  "chord": [
+   null,
+   44.201,
+   null,
+   null
+  ]
+ },
+ {
+  "sec": 124,
+  "file": "t124.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 125,
+  "file": "t125.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 126,
+  "file": "t126.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 127,
+  "file": "t127.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 128,
+  "file": "t128.png",
+  "ok": false,
+  "why": "no head-shaped blob"
+ },
+ {
+  "sec": 129,
+  "file": "t129.png",
+  "ok": false,
+  "why": "chord touches robe/arm/neck",
+  "blob": [
+   1632,
+   879,
+   1661,
+   899
+  ],
+  "chord": [
+   null,
+   35.222,
+   null,
+   32.494
+  ]
+ }
+]

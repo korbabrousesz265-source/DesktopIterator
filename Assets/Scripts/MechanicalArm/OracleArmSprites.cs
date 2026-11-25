@@ -13,17 +13,16 @@ using UnityEngine;
 //   pixel               1 px bar for the cogs, the two rods and the supports
 //
 // Positions and directions follow ArmJointGraphics.DrawSprites, its
-// InitiateSprites scales and ArmBase.DrawSprites / ArmBase.UpdateMesh. The one
-// deliberate change is detailScale: the desktop shell is about twice as thick as
-// the original 12 px band, so the sprite layers are enlarged with it to keep the
-// original proportions against the arm.
+// InitiateSprites scales and ArmBase.DrawSprites / ArmBase.UpdateMesh. The shell
+// width is configured separately by OracleArmGraphics; detailScale controls the
+// sprite layers' desktop presentation.
 [DefaultExecutionOrder(60)]
 public class OracleArmSprites : MonoBehaviour
 {
     public OracleArm oracleArm;
     [Tooltip("Rain World draws in pixels; the project maps 1 px to 1/pixelsPerUnit units.")]
     [Min(1f)] public float pixelsPerUnit = 100f;
-    [Tooltip("Enlargement of the sprite layers so they keep their proportions against the thicker desktop shell.")]
+    [Tooltip("Scale of pixel details for the desktop display.")]
     [Min(0.1f)] public float detailScale = 1.35f;
 
     [Header("Palette")]
@@ -49,8 +48,8 @@ public class OracleArmSprites : MonoBehaviour
     [Header("Sorting orders")]
     public int rodOrder = -14;
     public int cogOrder = -13;
-    public int elbowDiscOrder = -12;
-    public int elbowBoltOrder = -11;
+    public int elbowDiscOrder = -8;
+    public int elbowBoltOrder = -7;
     public int jointDiscOrder = -8;
     public int jointBoltOrder = -7;
     public int basePlateOrder = -6;
@@ -274,7 +273,9 @@ public class OracleArmSprites : MonoBehaviour
 
         // The carriage bearing is centered on the same pin as the root of the shell.
         // Keep the last bearing compact so it reads as part of the arm near the robe.
-        float bearingScale = index == joints.Length - 2 ? detailScale * 0.72f : detailScale;
+        // Pins use the same pixel scale as the shell now that the shell is derived
+        // from the game's num3 profile; the old per-joint shrink is gone.
+        float bearingScale = detailScale;
         Vector2 discPos = pos + toElbow * Detail(index == 0 ? 0f : 2f);
         float discScale = (7f - index * 0.5f) / 10f * bearingScale;
         PlaceSprite(visuals.disc, discPos, 0f, new Vector2(discScale, discScale));
@@ -310,7 +311,7 @@ public class OracleArmSprites : MonoBehaviour
             strutDirection = -toElbow;
         strutDirection.Normalize();
         float strutScaleX = (index == 0 ? 1.5f : (index == 1 ? 1f : 0.8f)) * ((index % 2 == 0) ? -1f : 1f);
-        float strutScaleY = (index == 0 ? 2f : (index == 1 ? 1f : 0.5f)) * detailScale * 0.75f;
+        float strutScaleY = (index == 0 ? 2f : (index == 1 ? 1f : 0.5f)) * detailScale;
         Vector2 strutCenter = elbow - strutDirection * (Detail(25f) * strutScaleY * 0.5f);
         PlaceSprite(visuals.strut, strutCenter, Aim(strutDirection),
             new Vector2(strutScaleX * detailScale, strutScaleY));
@@ -325,7 +326,7 @@ public class OracleArmSprites : MonoBehaviour
             rodDirection = toElbow;
         float guideDistance = rodDirection.magnitude;
         rodDirection /= Mathf.Max(0.0001f, guideDistance);
-        smallArmLength = Mathf.Min(smallArmLength, guideDistance * 0.9f);
+        // No trim: the original rod keeps its fixed L/4 and may stick out of the shell.
         float rodWidth = (index == 0 ? 2f : 1.4f) * detailScale;
         Vector2 rodCenter = elbow + rodDirection * (smallArmLength * 0.5f);
         PlaceSprite(visuals.rodNear, rodCenter, Aim(rodDirection),
@@ -337,9 +338,8 @@ public class OracleArmSprites : MonoBehaviour
             farDirection = -toElbow;
         float farDistance = farDirection.magnitude;
         farDirection /= Mathf.Max(0.0001f, farDistance);
-        // ArmBase and ArmJointGraphics let the rod overrun its guide point; the
-        // desktop shell is wider, so the overrun is clipped to the second link.
-        float farLength = Mathf.Min(farDistance, Vector2.Distance(next, elbow) * 1.02f);
+        // Keep the rod end inside the second curved shell and its elbow cap.
+        float farLength = farDistance + Detail(10f);
         PlaceSprite(visuals.rodFar, next + farDirection * (farLength * 0.5f), Aim(farDirection),
             new Vector2(rodWidth, farLength * pixelsPerUnit));
         PlaceSprite(visuals.rodTip, rodEnd, 0f, Vector2.one * detailScale);
@@ -372,7 +372,7 @@ public class OracleArmSprites : MonoBehaviour
             basePlateMesh.RecalculateBounds();
         }
 
-        Vector2 shellAnchor = OracleArmGraphics.SampleRootShell(root, elbows[0], joints[1], 0.25f);
+        Vector2 shellAnchor = Vector2.Lerp(root, elbows[0], 0.25f);
         if (debugLayout && Time.frameCount % 60 == 0)
         {
             Debug.Log("ARMDBG joints=" + string.Join(";", System.Array.ConvertAll(joints, v => v.x.ToString("F3") + "," + v.y.ToString("F3")))
@@ -382,14 +382,11 @@ public class OracleArmSprites : MonoBehaviour
         }
         // The two stays share the arm-side attachment and fold to opposite sides.
         float shortLength = Detail(supportShortLength);
-        float nominalLongLength = Detail(supportLongLength);
+        float longLength = Detail(supportLongLength);
         for (int side = 0; side < 2; side++)
         {
             float sign = side == 0 ? -1f : 1f;
             Vector2 foot = center + inward * Detail(11f) + tangent * Detail(17f * sign);
-            float span = Vector2.Distance(foot, shellAnchor);
-            // Accommodate the desktop travel range with the inner piston.
-            float longLength = Mathf.Clamp(nominalLongLength, Mathf.Abs(span - shortLength), span + shortLength);
             Vector2 knee = TwoBoneJoint(foot, shellAnchor, shortLength, longLength, sign, tangent * sign);
 
             PlaceBar(baseSupports[side * 2], foot, knee, Detail(3f));

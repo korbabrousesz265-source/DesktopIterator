@@ -336,22 +336,26 @@ public class OracleArm : MonoBehaviour
         return Mathf.Max(0.01f, segmentLengths[span]) * proportion;
     }
 
+    // Oracle.OracleArm.Joint.ElbowPos: the bend is solved from the far pivot with
+    // bones of L/3 (tip side) and 2L/3 (joint side), L/3 and L/3 for the last span,
+    // and Custom.InverseKinematic clamps the cosine to [0.2, 0.98] so the joint keeps
+    // a visible bend even when the chord is straight.
     private Vector2 SolveElbow(int span, Vector2 start, Vector2 end)
     {
-        float firstLength = GetFirstPieceLength(span);
-        float secondLength = Mathf.Max(0.01f, segmentLengths[span]) - firstLength;
+        float length = Mathf.Max(0.01f, segmentLengths[span]);
+        float tipBone = length / 3f;
+        float jointBone = span == segmentLengths.Length - 1 ? length / 3f : 2f * length / 3f;
         Vector2 chord = end - start;
         float distance = chord.magnitude;
         if (distance < 0.00001f)
-            return start + Vector2.up * firstLength;
+            return end + Vector2.up * tipBone;
 
-        Vector2 axis = chord / distance;
-        Vector2 normal = new Vector2(-axis.y, axis.x);
-        float along = (firstLength * firstLength - secondLength * secondLength + distance * distance)
-            / (2f * distance);
-        along = Mathf.Clamp(along, -firstLength, firstLength);
-        float rise = Mathf.Sqrt(Mathf.Max(0f, firstLength * firstLength - along * along));
-        return start + axis * along + normal * ((span % 2 == 0 ? 1f : -1f) * rise);
+        float cosine = Mathf.Clamp((distance * distance + tipBone * tipBone - jointBone * jointBone)
+            / (2f * distance * tipBone), 0.2f, 0.98f);
+        float bend = Mathf.Acos(cosine) * ((span % 2 == 0) ? 1f : -1f);
+        // Custom.VecToDeg measures clockwise from +Y; DegToVec is its inverse.
+        float bearing = Mathf.Atan2(chord.x, chord.y) + bend;
+        return end + new Vector2(Mathf.Sin(bearing), Mathf.Cos(bearing)) * tipBone;
     }
 
     private void CloseChain(Vector2 root, Vector2 target)
